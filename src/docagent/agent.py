@@ -2,11 +2,12 @@
 
 Two-layer LangGraph:
     START -> intent_router --in_scope--> response_agent (subgraph) -> END
-                          \--out_of_scope--> END (politely declined)
+                          \--out_of_scope / empty KB--> END
 
-The response_agent is the classic tool-calling loop, but instead of writing
-emails it searches the knowledge base, may re-search with a better query, and
-finishes by calling `Answer` (which forces citations).
+The response_agent is a tool-calling loop: it searches the hybrid retriever,
+may re-search with a better query, and finishes by calling `Answer` (which
+forces citations). Every retrieval/decision is appended to `state["trace"]`
+for observability, and tool failures are caught rather than crashing the graph.
 """
 
 from typing import Literal
@@ -27,6 +28,7 @@ from docagent.prompts import (
 )
 from docagent.schemas import State, StateInput, IntentSchema
 from docagent.configuration import DEFAULT_LLM_MODEL
+from docagent.retriever import get_retriever
 
 load_dotenv(".env")
 
@@ -65,15 +67,25 @@ def llm_call(state: State):
 
 
 def tool_node(state: State):
-    """Execute the (non-terminal) tool calls from the last message."""
+    """Execute non-terminal tool calls, recording a trace and catching failures."""
     result = []
+    trace = []
     for tool_call in state["messages"][-1].tool_calls:
-        tool = tools_by_name[tool_call["name"]]
-        observation = tool.invoke(tool_call["args"])
+        name = tool_call["name"]
+        try:
+            observation = tools_by_name[name].invoke(tool_call["args"])
+        except Exception as e:  # noqa: BLE001 — never let a tool crash the graph
+            observation = f"Tool '{name}' failed: {e}"
         result.append(
             {"role": "tool", "content": observation, "tool_call_id": tool_call["id"]}
         )
-    return {"messages": result}
+        if name == "search_docs":
+            trace.append(
+                {"step": "search_docs", "query": tool_call["args"].get("query", "")}
+            )
+        elif name == "list_sources":
+            trace.append({"step": "list_sources"})
+    return {"messages": result, "trace": trace}
 
 
 def should_continue(state: State) -> Literal["environment", "__end__"]:
@@ -100,40 +112,61 @@ agent_builder.add_edge("environment", "llm_call")
 agent = agent_builder.compile()
 
 
-# --- Intent router (the front-line harness) ---
+# --- Intent router (front-line harness) ---
 def intent_router(state: State) -> Command[Literal["response_agent", "__end__"]]:
-    """Decide whether the question can be answered from the knowledge base."""
+    """Guard an empty KB, then decide if the question is worth retrieving for."""
     question = state["question_input"].get("question", "")
-    system_prompt = intent_system_prompt.format(
-        kb_description=default_kb_description,
-        intent_instructions=default_intent_instructions,
-    )
-    user_prompt = intent_user_prompt.format(question=question)
+
+    # Robustness: don't run the agent against an empty knowledge base.
+    if get_retriever().is_empty:
+        return Command(
+            goto=END,
+            update={
+                "classification_decision": "out_of_scope",
+                "trace": [{"step": "guard", "detail": "empty knowledge base"}],
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": "The knowledge base is empty. Run "
+                        "`python -m docagent.ingest --path <your-docs>` first.",
+                    }
+                ],
+            },
+        )
 
     result = llm_router.invoke(
         [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {
+                "role": "system",
+                "content": intent_system_prompt.format(
+                    kb_description=default_kb_description,
+                    intent_instructions=default_intent_instructions,
+                ),
+            },
+            {"role": "user", "content": intent_user_prompt.format(question=question)},
         ]
     )
 
     if result.classification == "in_scope":
         print("🔎 Intent: IN_SCOPE — retrieving from knowledge base")
-        goto = "response_agent"
-        update = {
-            "classification_decision": result.classification,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": f"Answer this question using the knowledge base: {question}",
-                }
-            ],
-        }
-    elif result.classification == "out_of_scope":
-        print("🚫 Intent: OUT_OF_SCOPE — politely declining")
-        goto = END
-        update = {
-            "classification_decision": result.classification,
+        return Command(
+            goto="response_agent",
+            update={
+                "classification_decision": "in_scope",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"Answer this question using the knowledge base: {question}",
+                    }
+                ],
+            },
+        )
+
+    print("🚫 Intent: OUT_OF_SCOPE — politely declining")
+    return Command(
+        goto=END,
+        update={
+            "classification_decision": "out_of_scope",
             "messages": [
                 {
                     "role": "assistant",
@@ -141,16 +174,13 @@ def intent_router(state: State) -> Command[Literal["response_agent", "__end__"]]
                     "knowledge base, so I can't answer it from the available documents.",
                 }
             ],
-        }
-    else:
-        raise ValueError(f"Invalid classification: {result.classification}")
-
-    return Command(goto=goto, update=update)
+        },
+    )
 
 
 # Build the overall workflow
 overall_workflow = (
-    StateGraph(State, input=StateInput)
+    StateGraph(State, input_schema=StateInput)
     .add_node("intent_router", intent_router)
     .add_node("response_agent", agent)
     .add_edge(START, "intent_router")

@@ -1,48 +1,56 @@
-"""Local retrieval tests — no LLM API key required.
+"""Retrieval tests — no LLM API key required.
 
-These exercise the ingestion + vector-search half of the project end to end
-against the bundled sample_docs, so the suite has something that always runs
-green offline (CI-friendly).
+These exercise the full retrieval stack (hybrid dense+BM25 -> RRF ->
+cross-encoder rerank -> relevance threshold) against the FastAPI corpus, so the
+suite always has something that runs green offline (CI-friendly).
 """
 
 from pathlib import Path
 
 import pytest
 
-from docagent.ingest import load_documents
+from docagent.ingest import load_documents, chunk_documents
 from docagent.vectorstore import get_vectorstore
+from docagent.retriever import HybridRetriever
 
-SAMPLE_DOCS = Path(__file__).parent.parent / "sample_docs"
+CORPUS = Path(__file__).parent.parent / "corpus" / "fastapi"
 
 
-def test_load_sample_documents():
-    docs = load_documents(SAMPLE_DOCS)
-    assert len(docs) >= 3
+def test_load_corpus():
+    docs = load_documents(CORPUS)
+    assert len(docs) >= 10
     sources = {d.metadata["source"] for d in docs}
-    assert "faq.md" in sources
+    assert "async.md" in sources
+    # attribution files must be skipped, not ingested as content
+    assert "LICENSE" not in sources and "SOURCE.md" not in sources
 
 
 @pytest.fixture(scope="module")
-def ingested(tmp_path_factory):
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-
+def kb(tmp_path_factory):
+    """Build a throwaway knowledge base from the corpus and return a retriever."""
     chroma_path = str(tmp_path_factory.mktemp("chroma"))
-    docs = load_documents(SAMPLE_DOCS)
-    chunks = RecursiveCharacterTextSplitter(
-        chunk_size=500, chunk_overlap=50
-    ).split_documents(docs)
+    docs = load_documents(CORPUS)
+    chunks = chunk_documents(docs, chunk_size=1000, chunk_overlap=150)
     vs = get_vectorstore(persist_directory=chroma_path, collection_name="test_kb")
-    vs.add_documents(chunks)
-    return vs
+    vs.add_documents(chunks, ids=[c.metadata["chunk_id"] for c in chunks])
+    return HybridRetriever(persist_directory=chroma_path, collection_name="test_kb")
 
 
-def test_search_finds_vector_store_fact(ingested):
-    results = ingested.similarity_search("what vector store is used", k=3)
-    joined = " ".join(r.page_content.lower() for r in results)
-    assert "chroma" in joined
+def test_hybrid_retrieval_hits_relevant_doc(kb):
+    hits = kb.search("how do I declare an integer path parameter", k=3)
+    assert hits, "expected at least one hit"
+    assert any("path-params" in h.source for h in hits)
+    # every hit carries a precise line-range locator
+    assert all(h.start_line is not None and h.end_line is not None for h in hits)
 
 
-def test_search_finds_file_formats_fact(ingested):
-    results = ingested.similarity_search("supported file formats", k=3)
-    joined = " ".join(r.page_content.lower() for r in results)
-    assert "pdf" in joined
+def test_hybrid_retrieval_error_handling_doc(kb):
+    hits = kb.search("how to return an HTTP error to the client", k=3)
+    assert any("handling-errors" in h.source for h in hits)
+
+
+def test_threshold_filters_out_of_scope(kb):
+    # nothing in the FastAPI docs answers this -> all candidates fall below
+    # the relevance threshold, so the retriever returns nothing.
+    hits = kb.search("what is the capital of France", k=3)
+    assert hits == []

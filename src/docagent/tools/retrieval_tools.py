@@ -1,8 +1,9 @@
 """Retrieval tools for the document QA agent.
 
-The agent drives an *agentic RAG* loop with these tools: it searches, inspects
-results, optionally re-searches with a better query, and finally calls
-``Answer`` — which forces it to attach citations, so no claim ships ungrounded.
+`search_docs` runs the hybrid retriever (dense + BM25 -> RRF -> cross-encoder
+rerank -> relevance threshold) and returns ranked chunks with **precise source
+locators**, so the agent can cite exactly where each fact came from. The
+terminal `Answer` tool forces citations, so no claim ships ungrounded.
 """
 
 from typing import List
@@ -11,37 +12,36 @@ from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 
 from docagent.configuration import DEFAULT_TOP_K
-from docagent.vectorstore import get_vectorstore
-
-
-def _format_source(metadata: dict) -> str:
-    """Build a short, human-readable source label from chunk metadata."""
-    src = metadata.get("source", "unknown")
-    page = metadata.get("page")
-    return f"{src}#p{page}" if page is not None else str(src)
+from docagent.retriever import get_retriever
 
 
 @tool
 def search_docs(query: str, k: int = DEFAULT_TOP_K) -> str:
-    """Search the knowledge base; return the top-k relevant chunks with sources."""
-    vs = get_vectorstore()
-    docs = vs.similarity_search(query, k=k)
-    if not docs:
-        return "No matching chunks found in the knowledge base."
+    """Search the knowledge base; return reranked chunks with source locators.
+
+    Each result is labelled with a precise locator (``file:Lstart-Lend`` or a
+    PDF page) and a relevance score. Cite these locators in your final Answer.
+    Call again with a reformulated query if the results are weak.
+    """
+    chunks = get_retriever().search(query, k=k)
+    if not chunks:
+        return (
+            "No sufficiently relevant chunks found. The knowledge base likely "
+            "does not cover this — reformulate the query, or if it still finds "
+            "nothing, tell the user the answer is not in the documents."
+        )
     blocks = []
-    for i, d in enumerate(docs, 1):
-        label = _format_source(d.metadata or {})
-        blocks.append(f"[{i}] source: {label}\n{d.page_content.strip()}")
+    for i, c in enumerate(chunks, 1):
+        blocks.append(
+            f"[{i}] locator: {c.locator}  (relevance {c.score:.2f})\n{c.text.strip()}"
+        )
     return "\n\n".join(blocks)
 
 
 @tool
 def list_sources() -> str:
     """List the distinct documents currently in the knowledge base."""
-    vs = get_vectorstore()
-    data = vs.get()  # all stored items; fine for a local KB
-    metadatas = data.get("metadatas", []) or []
-    sources = sorted({(m or {}).get("source", "unknown") for m in metadatas})
+    sources = get_retriever().list_sources()
     if not sources:
         return "The knowledge base is empty. Run the ingest script first."
     return "Documents in the knowledge base:\n" + "\n".join(f"- {s}" for s in sources)
@@ -49,11 +49,15 @@ def list_sources() -> str:
 
 @tool
 class Answer(BaseModel):
-    """Provide the final, grounded answer with citations. Ends the task."""
+    """Provide the final, grounded answer with precise citations. Ends the task."""
 
-    answer: str = Field(description="The final answer, grounded in retrieved chunks.")
+    answer: str = Field(
+        description="The final answer. Cite sources inline using their locators, "
+        "e.g. '... runs it in a threadpool [async.md:L120-145].'"
+    )
     citations: List[str] = Field(
-        description="Source labels (file name / page) actually used for the answer."
+        description="The exact source locators you relied on, e.g. "
+        "['async.md:L120-145', 'tutorial-body.md:L5-30']."
     )
 
 

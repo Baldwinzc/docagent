@@ -2,8 +2,8 @@
 
 Every value can be overridden with an environment variable of the same name in
 upper case (see ``.env.example``). The module-level ``DEFAULT_*`` constants are
-used by the ingestion script and the retrieval backend; the ``Configuration``
-dataclass exposes the same knobs to the LangGraph runtime via ``configurable``.
+used by ingestion + retrieval; the ``Configuration`` dataclass exposes the same
+knobs to the LangGraph runtime via ``configurable``.
 """
 
 import os
@@ -12,17 +12,30 @@ from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 
-# --- Module-level defaults (shared by ingest + retrieval) ---
-DEFAULT_EMBEDDING_MODEL = os.environ.get(
-    "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
-)
+# --- Embeddings & vector store ---
+DEFAULT_EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 DEFAULT_CHROMA_PATH = os.environ.get("CHROMA_PATH", "./chroma_db")
 DEFAULT_COLLECTION = os.environ.get("CHROMA_COLLECTION", "docagent")
-DEFAULT_TOP_K = int(os.environ.get("TOP_K", "4"))
+
+# --- Chunking (ingest) ---
 DEFAULT_CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "1000"))
 DEFAULT_CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "150"))
-# LLM is the only piece that may need an API key; default to OpenAI, but any
-# provider supported by ``init_chat_model`` works, e.g. "ollama:llama3.1".
+
+# --- Hybrid retrieval + rerank ---
+DEFAULT_TOP_K = int(os.environ.get("TOP_K", "4"))
+# How many candidates each retriever (dense + BM25) contributes before fusion.
+DEFAULT_CANDIDATE_K = int(os.environ.get("CANDIDATE_K", "20"))
+# Cross-encoder used to re-rank fused candidates.
+DEFAULT_RERANKER_MODEL = os.environ.get(
+    "RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"
+)
+# Minimum cross-encoder relevance score (a logit) to keep a chunk. Chunks below
+# this are dropped, which is what lets the agent honestly say "not in the docs".
+DEFAULT_SCORE_THRESHOLD = float(os.environ.get("SCORE_THRESHOLD", "0.0"))
+# RRF constant for reciprocal-rank fusion.
+DEFAULT_RRF_K = int(os.environ.get("RRF_K", "60"))
+
+# --- LLM (only the answer step may need a key) ---
 DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL", "openai:gpt-4.1")
 
 
@@ -32,9 +45,12 @@ class Configuration:
 
     llm_model: str = DEFAULT_LLM_MODEL
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
+    reranker_model: str = DEFAULT_RERANKER_MODEL
     chroma_path: str = DEFAULT_CHROMA_PATH
     collection_name: str = DEFAULT_COLLECTION
     top_k: int = DEFAULT_TOP_K
+    candidate_k: int = DEFAULT_CANDIDATE_K
+    score_threshold: float = DEFAULT_SCORE_THRESHOLD
 
     @classmethod
     def from_runnable_config(

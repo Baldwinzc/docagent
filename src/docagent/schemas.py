@@ -1,5 +1,8 @@
 """State and structured-output schemas for the document QA agent."""
 
+import operator
+from typing import Annotated
+
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict, Literal
 from langgraph.graph import MessagesState
@@ -21,12 +24,17 @@ class IntentSchema(BaseModel):
 class StateInput(TypedDict):
     """The external input to the graph."""
 
-    # e.g. {"question": "How do I configure X?"}
-    question_input: dict
+    question_input: dict  # e.g. {"question": "How do I declare a path param?"}
 
 
 class State(MessagesState):
-    """Graph state. ``messages`` is inherited from MessagesState."""
+    """Graph state. ``messages`` is inherited from MessagesState.
+
+    ``trace`` accumulates structured observability events (one per retrieval /
+    decision) via the ``operator.add`` reducer, so the whole agentic run can be
+    inspected after the fact.
+    """
 
     question_input: dict
     classification_decision: Literal["in_scope", "out_of_scope"]
+    trace: Annotated[list, operator.add]

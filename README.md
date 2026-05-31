@@ -3,43 +3,56 @@
 **English** | [中文](README.zh-CN.md)
 
 Ask natural-language questions over your own files (Markdown / text / PDF) and get
-answers that **always cite their sources**. Built on [LangGraph](https://langchain-ai.github.io/langgraph/).
+answers that **cite their exact source location**. Built on
+[LangGraph](https://langchain-ai.github.io/langgraph/).
 
-Unlike a plain single-shot RAG pipeline, docagent runs an **agentic retrieval
-loop**: it decides how many times to search, reformulates weak queries, and only
-answers once it has gathered enough evidence — through an `Answer` tool that
-*forces* citations, so no claim ships ungrounded.
+docagent is not a single-shot RAG demo. It runs an **agentic retrieval loop** on
+top of a real retrieval pipeline (hybrid dense + BM25, cross-encoder rerank,
+relevance threshold), forces grounded citations down to the line range, exposes a
+retrieval trace, and ships with a **quantitative evaluation** harness.
 
 ## Features
 
-- 🔁 **Agentic retrieval** — the agent can call `search_docs` several times with
-  reformulated queries before it commits to an answer.
-- 📎 **Forced citations** — the final answer is produced by an `Answer` tool that
-  requires a list of source citations.
-- 🧭 **Intent routing** — an up-front router declines out-of-scope questions
-  without wasting a retrieval or an answer.
-- 🔒 **Local embeddings, no API key** — documents are embedded with
-  sentence-transformers locally; only the answer step calls an LLM.
-- 🧱 **Clean LangGraph architecture** — a small, readable two-layer state graph
-  with tests, evaluation, and CI scaffolding.
+- 🔁 **Agentic retrieval** — the agent can search, inspect, reformulate, and
+  search again before answering.
+- 🧪 **Hybrid retrieval + rerank** — dense (bge embeddings) **+** BM25 fused with
+  Reciprocal-Rank-Fusion, then re-ranked by a cross-encoder, then filtered by a
+  relevance threshold (which is also how it honestly says "not in the docs").
+- 📎 **Precise, forced citations** — answers cite exact locators like
+  `tutorial-path-params.md:L65-91`, produced through an `Answer` tool that
+  *requires* citations.
+- 🧭 **Intent routing** — an up-front router declines out-of-scope questions.
+- 🔭 **Observability** — every retrieval step is recorded in a `trace`
+  (`--trace` on the CLI).
+- 🛡️ **Robustness** — empty-KB guard, tool-failure capture, recursion limit.
+- 📊 **Quantitative evaluation** — intent / recall / answer / citation / refusal
+  metrics over a labelled QA set (see [Evaluation](#evaluation)).
+- 🔒 **Local embeddings, no API key** for retrieval; only the answer LLM needs one.
 
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TB
     START([START]) --> R[intent_router]
-    R -- out_of_scope --> D([END · politely declined])
-    R -- in_scope --> A
+    R -- out_of_scope / empty KB --> D([END · declined])
+    R -- in_scope --> L[llm_call]
+    L --> C{terminal tool?}
+    C -- search_docs --> E[environment]
+    E --> L
+    C -- Answer --> X([END · answer + citations])
 
-    subgraph A [response agent · RAG loop]
-        direction LR
-        L[llm_call] --> C{terminal tool?}
-        C -- search_docs / list_sources --> E[environment]
-        E --> L
-        C -- Answer / Question --> X([END])
+    E -.calls.-> PIPE
+
+    subgraph PIPE [hybrid retrieval pipeline]
+      direction TB
+      Q[query] --> DENSE[dense · bge]
+      Q --> BM25[BM25]
+      DENSE --> RRF[RRF fusion]
+      BM25 --> RRF
+      RRF --> RERANK[cross-encoder rerank]
+      RERANK --> THRESH[relevance threshold]
+      THRESH --> OUT2[top-k chunks + locators]
     end
-
-    A --> OUT([answer + citations])
 ```
 
 ## Quickstart
@@ -54,127 +67,142 @@ pip install -e .
 cp .env.example .env          # then put your OPENAI_API_KEY in .env
 #   (or set LLM_MODEL=ollama:llama3.1 to run fully local)
 
-# 3. Build the knowledge base from the bundled samples
-python -m docagent.ingest --path ./sample_docs
+# 3. Build the knowledge base (bundled FastAPI docs, or point --path at your own)
+python -m docagent.ingest --path ./corpus/fastapi --reset
 
-# 4. Ask away
-python -m docagent.ask "What vector store does docagent use?"
+# 4. Ask
+python -m docagent.ask --trace "How do I declare an integer path parameter?"
 ```
-
-Point `--path` at any folder of your own `.md` / `.txt` / `.rst` / `.pdf` files to
-build a knowledge base over your own documents. Re-run with `--reset` to rebuild.
 
 ## Example run
 
-**Build the knowledge base** from the bundled `sample_docs/`:
+**In-scope question** — the agent searches, then answers with line-precise citations:
 
 ```console
-$ python -m docagent.ingest --path ./sample_docs --reset
-Loading documents from ./sample_docs ...
-Loaded 3 raw document section(s).
-Split into 6 chunks.
-Ingested 6 chunks into collection 'docagent' at ./chroma_db.
-Done.
-```
-
-**Ask an in-scope question** — the agent retrieves, then answers with citations:
-
-```console
-$ python -m docagent.ask "What vector store does docagent use, and do I need an API key for embeddings?"
+$ python -m docagent.ask --trace "How do I declare a path parameter that must be an integer, and what does FastAPI do if the client sends a non-integer?"
 🔎 Intent: IN_SCOPE — retrieving from knowledge base
+=== trace ===
+  1. search_docs  query='FastAPI path parameter integer non-integer validation'
 
 === Answer ===
-docagent uses a local persistent Chroma vector store (default `./chroma_db`).
-You do not need an API key for embeddings; embeddings are generated locally with
-a sentence-transformers model (`all-MiniLM-L6-v2` by default), so the retrieval
-half runs fully locally. The answer-generation LLM may require an API key
-depending on the provider you choose, but embeddings themselves do not.
+Declare the path parameter with a Python type annotation, e.g. `item_id: int`.
+FastAPI validates the value and returns a validation error if the client sends a
+non-integer [tutorial-path-params.md:L65-91].
 
 === Citations ===
-- faq.md
-- architecture.md
-- about_docagent.md
+- tutorial-path-params.md:L65-91
+- tutorial-path-params.md:L89-107
 ```
 
-**Ask an out-of-scope question** — the router declines without wasting a retrieval:
+**Out-of-scope question** — the router declines without wasting a retrieval:
 
 ```console
 $ python -m docagent.ask "What is the capital of France?"
 🚫 Intent: OUT_OF_SCOPE — politely declining
-
 This question is outside the scope of the local knowledge base, so I can't
 answer it from the available documents.
 ```
 
-## How it works
+You can inspect the retrieval stack directly (no API key) with the probe:
 
-1. **Intent router** classifies the question as `in_scope` or `out_of_scope`
-   using an LLM with structured output. Out-of-scope questions end with a polite
-   refusal.
-2. **Response agent** (in-scope only) runs a tool-calling loop:
-   - `search_docs` performs semantic search over the Chroma store;
-   - the agent inspects results and may search again with a better query;
-   - `Answer(answer, citations)` ends the loop with a grounded, cited answer.
+```bash
+python scripts/check_retrieval.py
+```
+
+## Retrieval pipeline
+
+`search_docs` does **not** do naive top-k cosine similarity. For each query:
+
+1. **Dense** retrieval with `bge-small-en-v1.5` embeddings (top *candidate_k*).
+2. **Sparse** retrieval with **BM25** (top *candidate_k*).
+3. **RRF fusion** combines both rankings (robust to either signal being weak).
+4. **Cross-encoder rerank** (`ms-marco-MiniLM-L-6-v2`) scores each candidate
+   against the query.
+5. **Relevance threshold** drops low-scoring chunks — so an out-of-domain query
+   returns nothing, which is what lets the agent answer "not in the docs".
+
+Each surviving chunk keeps precise provenance (`source:Lstart-Lend`, or a PDF
+page) for citation.
+
+## Evaluation
+
+A labelled QA set (`src/docagent/eval/qa_dataset.py`) covers single-doc,
+multi-hop, out-of-scope, and unanswerable questions. Run it with:
+
+```bash
+python -m docagent.eval.run_eval
+```
+
+Latest run over the bundled FastAPI corpus (206 chunks / 12 docs), answer LLM
+`gpt-5.4-mini`:
+
+| Metric | Result |
+|---|---|
+| Intent routing accuracy | **10/10 (100%)** |
+| Retrieval recall (mean) | **0.94** |
+| Answer correctness (LLM-judged) | **7/8 (88%)** |
+| Citation grounding | **7/8 (88%)** |
+| Refusal accuracy | **2/2 (100%)** |
+
+The one miss is a **multi-hop** question that needs facts from two documents at
+once; the agent retrieves one of them. Multi-hop synthesis (sub-query
+decomposition) is the main area for future work.
 
 ## Project layout
 
 ```
 src/docagent/
-├── agent.py            # LangGraph: intent_router + response-agent RAG loop
-├── ingest.py           # CLI: load docs → chunk → embed → Chroma
-├── ask.py              # CLI: ask the knowledge base a question
+├── agent.py            # LangGraph: intent_router + response-agent loop + trace/guards
+├── retriever.py        # hybrid retrieval: dense+BM25 -> RRF -> rerank -> threshold
+├── ingest.py           # CLI: load -> chunk (+ line provenance) -> embed -> Chroma
+├── ask.py              # CLI: ask the KB (--trace to see retrieval steps)
 ├── vectorstore.py      # shared embeddings + Chroma backend
 ├── configuration.py    # env-overridable settings
 ├── prompts.py          # intent + agent prompts
-├── schemas.py          # graph state + structured-output schemas
+├── schemas.py          # graph state (+ trace channel) + structured-output schemas
 ├── tools/
 │   ├── base.py         # tool registry
 │   └── retrieval_tools.py  # search_docs, list_sources, Answer, Question
-└── eval/               # QA dataset + grading prompt
-sample_docs/            # demo knowledge base
-tests/                  # local retrieval tests + LLM end-to-end tests
+└── eval/
+    ├── qa_dataset.py   # labelled QA cases
+    └── run_eval.py     # metrics: intent / recall / answer / citation / refusal
+corpus/fastapi/         # demo corpus (FastAPI docs subset, MIT — see SOURCE.md)
+scripts/check_retrieval.py  # dev probe for the retrieval stack (no API key)
+tests/                  # retrieval tests (no key) + LLM end-to-end tests
 ```
 
 ## Testing
 
-```console
-$ python tests/run_all_tests.py          # local retrieval only (no API key)
-$ python tests/run_all_tests.py --all    # + LLM end-to-end (needs API key)
-...
-tests/test_response.py::test_expected_tool_calls[...vector_store...]  PASSED
-tests/test_response.py::test_expected_tool_calls[...file_formats...]  PASSED
-tests/test_response.py::test_expected_tool_calls[...embeddings...]    PASSED
-tests/test_response.py::test_response_criteria[...vector_store...]    PASSED
-tests/test_response.py::test_response_criteria[...file_formats...]    PASSED
-tests/test_response.py::test_response_criteria[...embeddings...]      PASSED
-tests/test_retrieval.py::test_load_sample_documents                   PASSED
-tests/test_retrieval.py::test_search_finds_vector_store_fact          PASSED
-tests/test_retrieval.py::test_search_finds_file_formats_fact          PASSED
-=================== 9 passed ===================
+```bash
+python tests/run_all_tests.py          # retrieval tests only (no API key)
+python tests/run_all_tests.py --all    # + LLM end-to-end (needs API key)
 ```
 
-- `tests/test_retrieval.py` — ingestion + semantic search over `sample_docs`; **no API key**, also runs in CI.
-- `tests/test_response.py` — end-to-end agent: checks the expected tool calls and
-  grades answer quality with an LLM (**needs an API key**).
+`tests/test_retrieval.py` exercises the hybrid retriever (hits, line-precise
+locators, threshold) with **no API key** and runs in CI.
 
 ## Configuration
 
-All settings can be set in `.env` (see `.env.example`):
+Set in `.env` (see `.env.example`):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OPENAI_API_KEY` | — | Key for the default OpenAI answer model |
+| `OPENAI_API_KEY` | — | Key for the answer model |
 | `LLM_MODEL` | `openai:gpt-4.1` | Any `init_chat_model` id, e.g. `ollama:llama3.1` |
-| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Local embedding model |
-| `CHROMA_PATH` | `./chroma_db` | Vector store directory |
-| `CHROMA_COLLECTION` | `docagent` | Collection name |
-| `TOP_K` | `4` | Chunks retrieved per search |
+| `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | Local dense embedding model |
+| `RERANKER_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Cross-encoder reranker |
+| `TOP_K` / `CANDIDATE_K` | `4` / `20` | Final hits / per-retriever candidates |
+| `SCORE_THRESHOLD` | `0.0` | Min rerank score to keep a chunk |
+| `CHROMA_PATH` / `CHROMA_COLLECTION` | `./chroma_db` / `docagent` | Vector store |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `150` | Ingest chunking |
 
 ## Tech stack
 
-LangGraph · LangChain · Chroma · sentence-transformers · pypdf
+LangGraph · LangChain · Chroma · sentence-transformers (bge) · rank-bm25 ·
+cross-encoder · pypdf
 
 ## License
 
-MIT
+MIT (this project). The demo corpus under `corpus/fastapi/` is a subset of the
+FastAPI documentation, redistributed under its MIT license — see
+`corpus/fastapi/SOURCE.md`.

@@ -2,7 +2,8 @@
 """CLI: ask the local knowledge base a question.
 
 Usage:
-    python -m docagent.ask "What vector store does docagent use?"
+    python -m docagent.ask "How do I declare a path parameter with a type?"
+    python -m docagent.ask --trace "..."     # also print the retrieval trace
 """
 
 import argparse
@@ -10,6 +11,21 @@ import argparse
 from dotenv import load_dotenv
 
 from docagent.agent import docagent
+
+
+def _print_trace(result: dict) -> None:
+    trace = result.get("trace") or []
+    if not trace:
+        return
+    print("=== trace ===")
+    for i, t in enumerate(trace, 1):
+        if t.get("step") == "search_docs":
+            print(f"  {i}. search_docs  query={t.get('query')!r}")
+        elif t.get("step") == "intent":
+            print(f"  {i}. intent       decision={t.get('decision')}")
+        else:
+            print(f"  {i}. {t.get('step')}  {t}")
+    print()
 
 
 def _print_result(result: dict) -> None:
@@ -21,7 +37,7 @@ def _print_result(result: dict) -> None:
             for tc in tool_calls:
                 if tc["name"] == "Answer":
                     args = tc["args"]
-                    print("\n=== Answer ===")
+                    print("=== Answer ===")
                     print(args.get("answer", "").strip())
                     citations = args.get("citations", []) or []
                     if citations:
@@ -29,20 +45,28 @@ def _print_result(result: dict) -> None:
                         for c in citations:
                             print(f"- {c}")
                     return
-    # Out-of-scope (or no Answer produced): show the last message text
     if messages:
-        print("\n" + str(messages[-1].content).strip())
+        print(str(messages[-1].content).strip())
 
 
 def main():
-    load_dotenv(".env")
+    load_dotenv()
     parser = argparse.ArgumentParser(
         description="Ask the local document knowledge base a question."
     )
     parser.add_argument("question", help="The question to ask.")
+    parser.add_argument(
+        "--trace", action="store_true", help="Print the agent's retrieval trace."
+    )
     args = parser.parse_args()
 
-    result = docagent.invoke({"question_input": {"question": args.question}})
+    result = docagent.invoke(
+        {"question_input": {"question": args.question}},
+        config={"recursion_limit": 12},
+    )
+
+    if args.trace:
+        _print_trace(result)
     _print_result(result)
 
 
