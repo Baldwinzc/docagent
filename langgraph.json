@@ -1,0 +1,11 @@
+{
+    "dockerfile_lines": [],
+    "graphs": {
+      "docagent": "./src/docagent/agent.py:docagent"
+    },
+    "python_version": "3.11",
+    "env": ".env",
+    "dependencies": [
+      "."
+    ]
+  }
