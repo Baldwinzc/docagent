@@ -11,7 +11,7 @@
 - 🔁 **Agentic 检索** —— 检索、检查、改写、再检索,然后作答。
 - 🧪 **混合检索 + 重排** —— dense(bge)**+** BM25 经 RRF 融合,再 cross-encoder 重排,再相关性阈值过滤(也是它能说"文档里没有"的机制)。
 - 🗂️ **多格式** —— Markdown / reStructuredText / PDF 同处一个知识库,每条引用带正确 locator(`file.md:L10-30` 或 `file.pdf (p.3)`)。
-- 📎 **精确、强制引用** —— `Answer` 工具**强制**附带引用。
+- 📎 **可验证的引用** —— `Answer` 工具**强制**附带引用,且每条都会**对照实际检索到的内容校验**;未支撑的(幻觉)locator 会被丢弃,而非盲信。
 - 🧭 **意图路由**、🔭 **检索 trace**(`--trace`)、🛡️ **健壮性**(空库/工具失败/递归守卫)。
 - 📊 **量化评估** —— 意图/召回/答案/引用/拒答。
 - 💬 **Web UI** —— 小型 FastAPI + 静态聊天前端。
@@ -49,7 +49,7 @@ flowchart TB
 # 1. 环境（Python 3.11）
 conda create -n docagent python=3.11 -c conda-forge
 conda activate docagent
-pip install -e .
+pip install -e .          # extras：".[dev]" 测试/lint · ".[cli]" langgraph dev · ".[corpus]" 重建 PDF
 
 # 2. 配置作答 LLM
 cp .env.example .env          # 把 OPENAI_API_KEY 填进 .env（或 LLM_MODEL=ollama:llama3.1）
@@ -77,7 +77,7 @@ python -m docagent.web        # 打开 http://127.0.0.1:8000
 python -m docagent.web   # http://127.0.0.1:8000
 ```
 
-API:`POST /api/ask {question}` → `{intent, answer, citations, trace}`,`GET /api/sources` → 文档列表。
+API:`POST /api/ask {question}` → `{kind, intent, answer, question, citations, unsupported, trace}`,`GET /api/sources` → 文档列表。
 
 ## 运行示例
 
@@ -139,11 +139,21 @@ python -m docagent.eval.run_eval
 |---|---|
 | 意图路由准确率 | **10/10 (100%)** |
 | 检索召回(均值) | **0.94** |
-| 答案正确率(LLM 评判) | **7/8 (88%)** |
+| 答案正确率(LLM 评判) | **7–8/8 (88–100%,逐次略有波动)** |
 | 引用准确率 | **8/8 (100%)** |
+| 幻觉引用 | **0**（每条引用都对照检索校验） |
 | 拒答准确率 | **2/2 (100%)** |
 
-> 当语料扩大 **6 倍（206 → 约 1.25k chunks）**,检索质量保持不变、引用准确率反而升到 100% —— 混合检索 + 重排可扩展。剩余差距在多跳综合（一个问题需同时用到两个文档）。
+幻觉引用:**0** —— 每条引用都对照实际检索内容校验过。语料扩大 6 倍（206 → 约 1.25k chunks）时检索质量保持。这是一个小型、单领域验证集:用于检验管线,**不**证明通用规模能力(见 [局限](#局限))。
+
+## 局限
+
+这是作品集级的本地文档 RAG,不是生产系统。已知局限:
+
+- **语料规模** —— 检索器启动时把全部 chunk 载入内存并构建 BM25。本地知识库(≤ 约 1 万 chunks)没问题;10⁵–10⁶ 量级需要服务端稀疏索引 + 懒加载。
+- **引用校验是文件级** —— 引用对照检索到的 locator 校验(按文件,精确 locator 命中时也按 locator),尚未逐句验证答案是否被引用片段蕴含。
+- **多跳** —— 需同时用两个文档的问题是主要准确率短板;子查询拆解是后续工作。
+- **评估集小且单领域**(Python web 文档 10 例)—— 足以检验管线,不足以宣称广泛泛化。
 
 ## 目录结构
 

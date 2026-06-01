@@ -8,8 +8,8 @@ terminal `Answer` tool forces citations, so no claim ships ungrounded.
 
 from typing import List
 
-from pydantic import BaseModel, Field
 from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 
 from docagent.configuration import DEFAULT_TOP_K
 from docagent.retriever import get_retriever

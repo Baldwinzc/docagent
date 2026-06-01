@@ -1,7 +1,7 @@
 [project]
 name = "docagent"
 version = "0.1.0"
-description = "Agentic RAG agent that answers questions over your local documents, with citations"
+description = "Agentic RAG agent that answers questions over your local documents, with verified citations"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "langchain>=1.0.0",
@@ -15,53 +15,41 @@ dependencies = [
     "sentence-transformers>=3.0.0",
     "rank-bm25>=0.2.2",
     "pypdf>=4.0.0",
+    "python-dotenv",
     "fastapi>=0.110.0",
     "uvicorn>=0.29.0",
-    "reportlab>=4.0.0",
-    "langsmith[pytest]>=0.4.37",
-    "pytest",
-    "pytest-xdist",
-    "langgraph-cli[inmem]>=0.4.0",
-    "python-dotenv",
-    "rich",
 ]
 
 [project.optional-dependencies]
-dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+dev = ["pytest", "pytest-xdist", "ruff>=0.6.1", "mypy>=1.11.1"]
+cli = ["langgraph-cli[inmem]>=0.4.0"]   # for `langgraph dev`
+corpus = ["reportlab>=4.0.0"]           # for scripts/build_corpus.py (PDF)
 
 [build-system]
 requires = ["setuptools>=73.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["docagent"]
-
-[tool.setuptools.package-dir]
-"docagent" = "src/docagent"
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.package-data]
-"*" = ["py.typed"]
+docagent = ["static/*", "py.typed"]
 
 [tool.ruff]
+src = ["src", "tests", "scripts"]
 lint.select = [
     "E",    # pycodestyle
     "F",    # pyflakes
     "I",    # isort
-    "D",    # pydocstyle
-    "D401", # First line should be in imperative mood
-    "T201",
     "UP",
 ]
 lint.ignore = [
     "UP006",
     "UP007",
     "UP035",
-    "D417",
     "E501",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["D", "UP"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
+"tests/*" = ["E402"]
+"src/docagent/web.py" = ["E402"]

@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,11 +15,23 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install (CPU torch + project)
+      - name: Install (CPU torch + project + dev)
         run: |
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e .
+          pip install -e ".[dev]"
 
-      - name: Local retrieval tests (no API key required)
+      - name: Lint (ruff)
+        run: ruff check src tests scripts
+
+      - name: Unit tests (offline — no network, no model downloads, no API key)
+        run: python -m pytest tests/test_unit.py -v
+
+      - name: Retrieval integration tests (downloads embedding + reranker)
         run: python -m pytest tests/test_retrieval.py -v
+
+      - name: Build wheel and verify static UI is packaged
+        run: |
+          pip install build
+          python -m build --wheel
+          python -c "import glob,zipfile; w=glob.glob('dist/*.whl')[0]; n=zipfile.ZipFile(w).namelist(); assert any(x.endswith('static/index.html') for x in n), 'static/index.html missing from wheel'; print('OK: static packaged in', w)"

@@ -1,28 +1,28 @@
 #!/usr/bin/env python
-"""Ingest local documents (Markdown / text / PDF) into the Chroma knowledge base.
+"""Ingest local documents (Markdown / RST / text / PDF) into the Chroma KB.
 
-Each chunk is stored with precise provenance metadata (source file + line range,
-or page number for PDFs) and a stable ``chunk_id`` used as the Chroma id, so the
-hybrid retriever can fuse dense/BM25 results and cite exact locations.
+Each chunk stores precise provenance: the **relative path** as ``source`` (so two
+same-named files in different folders don't collide), a line range (or PDF page),
+and a stable ``chunk_id`` used as the Chroma id.
 
 Usage:
-    python -m docagent.ingest --path ./corpus/fastapi
-    python -m docagent.ingest --path ./corpus/fastapi --reset
+    python -m docagent.ingest --path ./corpus
+    python -m docagent.ingest --path ./corpus --reset
 """
 
 import argparse
 from pathlib import Path
 from typing import List
 
+from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from dotenv import load_dotenv
 
 from docagent.configuration import (
     DEFAULT_CHROMA_PATH,
-    DEFAULT_COLLECTION,
-    DEFAULT_CHUNK_SIZE,
     DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_COLLECTION,
 )
 from docagent.vectorstore import get_vectorstore
 
@@ -33,12 +33,12 @@ PDF_EXTS = {".pdf"}
 SKIP_NAMES = {"LICENSE", "SOURCE.md"}  # corpus attribution files, not content
 
 
-def _load_text(path: Path) -> List[Document]:
+def _load_text(path: Path, source: str) -> List[Document]:
     text = path.read_text(encoding="utf-8", errors="ignore")
-    return [Document(page_content=text, metadata={"source": path.name})]
+    return [Document(page_content=text, metadata={"source": source})]
 
 
-def _load_pdf(path: Path) -> List[Document]:
+def _load_pdf(path: Path, source: str) -> List[Document]:
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
@@ -49,31 +49,36 @@ def _load_pdf(path: Path) -> List[Document]:
             docs.append(
                 Document(
                     page_content=text,
-                    metadata={"source": path.name, "page": i + 1},
+                    metadata={"source": source, "page": i + 1},
                 )
             )
     return docs
 
 
 def load_documents(root: Path) -> List[Document]:
-    """Load all supported files under ``root`` (recursively if a directory)."""
+    """Load supported files; ``source`` is each file's path relative to ``root``."""
+    if root.is_file():
+        files, base = [root], root.parent
+    else:
+        files, base = sorted(root.rglob("*")), root
+
     docs: List[Document] = []
-    files = [root] if root.is_file() else sorted(root.rglob("*"))
     for f in files:
         if not f.is_file() or f.name in SKIP_NAMES:
             continue
+        source = f.relative_to(base).as_posix()  # relative path => unique identity
         ext = f.suffix.lower()
         if ext in TEXT_EXTS:
-            docs.extend(_load_text(f))
+            docs.extend(_load_text(f, source))
         elif ext in PDF_EXTS:
-            docs.extend(_load_pdf(f))
+            docs.extend(_load_pdf(f, source))
     return docs
 
 
 def chunk_documents(
     raw_docs: List[Document], chunk_size: int, chunk_overlap: int
 ) -> List[Document]:
-    """Split docs and attach chunk_id + line range provenance to each chunk."""
+    """Split docs and attach a unique chunk_id + line-range provenance."""
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size, chunk_overlap=chunk_overlap, add_start_index=True
     )
@@ -88,6 +93,7 @@ def chunk_documents(
             end_line = start_line + ch.page_content.count("\n")
             idx = per_source.get(source, 0)
             per_source[source] = idx + 1
+            # source is a relative path => chunk_id is globally unique
             ch.metadata["chunk_id"] = f"{source}::{idx}"
             ch.metadata["start_line"] = start_line
             ch.metadata["end_line"] = end_line
@@ -136,8 +142,7 @@ def main():
         except Exception as e:  # noqa: BLE001
             print(f"Reset skipped: {e}")
 
-    ids = [c.metadata["chunk_id"] for c in chunks]
-    vs.add_documents(chunks, ids=ids)
+    vs.add_documents(chunks, ids=[c.metadata["chunk_id"] for c in chunks])
     print(
         f"Ingested {len(chunks)} chunks into collection "
         f"'{args.collection}' at {args.chroma_path}."

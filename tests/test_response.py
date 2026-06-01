@@ -1,100 +1,74 @@
 #!/usr/bin/env python
 """End-to-end agent tests (require an LLM API key; no LangSmith needed).
 
-Two checks per in-scope question:
-1. the agent makes the expected tool calls (search_docs -> Answer);
-2. the final answer meets human-written criteria, graded by an LLM.
+For each in-scope question, one agent run is checked for:
+1. expected tool calls (search_docs -> Answer),
+2. grounded citations (non-empty AND no hallucinated/unsupported locators),
+3. answer quality (LLM-judged against the criterion).
 
-Run from the project root so the agent reads the ./chroma_db built by
-`python -m docagent.ingest --path ./sample_docs`.
+Run from the project root after ingesting the corpus.
 """
 
-import uuid
-
 import pytest
-from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
-from langgraph.checkpoint.memory import MemorySaver
+from pydantic import BaseModel, Field
 
-from docagent.agent import overall_workflow
+from docagent.agent import get_default_agent
 from docagent.configuration import DEFAULT_LLM_MODEL
-from docagent.utils import extract_tool_calls, format_messages_string
 from docagent.eval.prompts import RESPONSE_CRITERIA_SYSTEM_PROMPT
-from docagent.eval.qa_dataset import (
-    qa_inputs,
-    qa_names,
-    response_criteria_list,
-    intent_outputs,
-    expected_tool_calls,
-)
+from docagent.eval.qa_dataset import QA_CASES, qa_names
+from docagent.utils import extract_outcome, extract_tool_calls, format_messages_string
+
+load_dotenv(override=True)
 
 
 class CriteriaGrade(BaseModel):
-    """LLM verdict on whether the answer meets the criteria."""
-
-    grade: bool = Field(description="Does the response meet the criteria?")
-    justification: str = Field(description="Justification with specific examples.")
+    grade: bool = Field(description="Does the answer satisfy the criterion?")
+    justification: str = Field(description="Justification, with specific examples.")
 
 
-criteria_eval_llm = init_chat_model(DEFAULT_LLM_MODEL).with_structured_output(
-    CriteriaGrade
-)
-
-
-def _setup():
-    compiled = overall_workflow.compile(checkpointer=MemorySaver())
-    thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-    return compiled, thread_config
-
-
-def _extract_values(state):
-    return state.values if hasattr(state, "values") else state
+_judge = init_chat_model(DEFAULT_LLM_MODEL).with_structured_output(CriteriaGrade)
 
 
 def _in_scope_cases():
-    cases = []
-    for qa, name, criteria, intent, calls in zip(
-        qa_inputs, qa_names, response_criteria_list, intent_outputs, expected_tool_calls
-    ):
-        if intent == "in_scope":
-            cases.append((qa, name, criteria, calls))
-    return cases
+    return [
+        (c["question"], n, c["criteria"])
+        for c, n in zip(QA_CASES, qa_names)
+        if c["intent"] == "in_scope"
+    ]
 
 
-@pytest.mark.parametrize(
-    "qa_input,qa_name,criteria,expected_calls", _in_scope_cases()
-)
-def test_expected_tool_calls(qa_input, qa_name, criteria, expected_calls):
-    """The agent should search the KB and then call Answer."""
-    compiled, thread_config = _setup()
-    compiled.invoke({"question_input": qa_input}, config=thread_config)
-
-    values = _extract_values(compiled.get_state(thread_config))
-    extracted = extract_tool_calls(values["messages"])
-    missing = [c for c in expected_calls if c.lower() not in extracted]
-    assert not missing, f"[{qa_name}] missing tool calls {missing}; got {extracted}"
+@pytest.fixture(scope="module")
+def agent():
+    return get_default_agent()
 
 
-@pytest.mark.parametrize(
-    "qa_input,qa_name,criteria,expected_calls", _in_scope_cases()
-)
-def test_response_criteria(qa_input, qa_name, criteria, expected_calls):
-    """The final answer should satisfy the human-written criteria."""
-    compiled, thread_config = _setup()
-    compiled.invoke({"question_input": qa_input}, config=thread_config)
+@pytest.mark.parametrize("question,name,criteria", _in_scope_cases())
+def test_in_scope_case(agent, question, name, criteria):
+    result = agent.invoke(
+        {"question_input": {"question": question}}, config={"recursion_limit": 12}
+    )
 
-    values = _extract_values(compiled.get_state(thread_config))
-    transcript = format_messages_string(values["messages"])
+    # 1. expected tool calls
+    tools = extract_tool_calls(result["messages"])
+    assert "search_docs" in tools, f"[{name}] no search_docs; got {tools}"
+    assert "answer" in tools, f"[{name}] never called Answer; got {tools}"
 
-    result = criteria_eval_llm.invoke(
+    # 2. grounded citations
+    o = extract_outcome(result)
+    assert o["citations"], f"[{name}] answer has no citations"
+    assert not o["unsupported"], f"[{name}] hallucinated citations: {o['unsupported']}"
+
+    # 3. answer quality (LLM-judged)
+    transcript = o["answer"] + "\n\n" + format_messages_string(result["messages"])
+    grade = _judge.invoke(
         [
             {"role": "system", "content": RESPONSE_CRITERIA_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"Response criteria: {criteria}\n\n"
-                f"Assistant's response:\n{transcript}\n\n"
-                "Does the response meet the criteria?",
+                "content": f"Response criteria: {criteria}\n\nAssistant's response:\n{transcript}\n\nDoes it meet the criteria?",
             },
         ]
     )
-    assert result.grade, f"[{qa_name}] {result.justification}"
+    assert grade.grade, f"[{name}] {grade.justification}"

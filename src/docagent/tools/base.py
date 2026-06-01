@@ -1,11 +1,11 @@
 """Tool registry for the document QA agent."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from langchain_core.tools import BaseTool
 
 
-def get_tools(tool_names: Optional[List[str]] = None) -> List[BaseTool]:
+def get_tools(tool_names: List[str] | None = None) -> List[BaseTool]:
     """Return the agent's tools, or a named subset if ``tool_names`` is given."""
     from docagent.tools.retrieval_tools import (
         Answer,
@@ -26,7 +26,7 @@ def get_tools(tool_names: Optional[List[str]] = None) -> List[BaseTool]:
     return [all_tools[name] for name in tool_names if name in all_tools]
 
 
-def get_tools_by_name(tools: Optional[List[BaseTool]] = None) -> Dict[str, BaseTool]:
+def get_tools_by_name(tools: List[BaseTool] | None = None) -> Dict[str, BaseTool]:
     """Return a dict mapping each tool's name to the tool."""
     if tools is None:
         tools = get_tools()

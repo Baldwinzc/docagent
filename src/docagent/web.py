@@ -5,26 +5,27 @@ Run:
     # or: uvicorn docagent.web:app --reload
 
 Endpoints:
-    POST /api/ask      {question} -> {intent, answer, citations, trace}
+    POST /api/ask      {question} -> {kind, intent, answer, question, citations, unsupported, trace}
     GET  /api/sources  -> {sources: [...]}
     GET  /             -> the chat UI (static/index.html)
 """
 
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from dotenv import load_dotenv
 
 load_dotenv()
 
-from docagent.agent import docagent  # noqa: E402  (load_dotenv must run first)
+from docagent.agent import get_default_agent  # noqa: E402 (after load_dotenv)
 from docagent.retriever import get_retriever  # noqa: E402
+from docagent.utils import extract_outcome  # noqa: E402
 
 app = FastAPI(
     title="docagent",
-    description="Agentic RAG over local documents, with citations.",
+    description="Agentic RAG over local documents, with verified citations.",
 )
 
 
@@ -33,40 +34,30 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
+    kind: str
     intent: str
     answer: str
+    question: str | None = None
     citations: list[str]
+    unsupported: list[str]
     trace: list[dict]
-
-
-def _extract(result: dict):
-    intent = result.get("classification_decision", "") or ""
-    answer, citations = "", []
-    for msg in reversed(result.get("messages", [])):
-        for tc in getattr(msg, "tool_calls", None) or []:
-            if tc["name"] == "Answer":
-                answer = tc["args"].get("answer", "")
-                citations = tc["args"].get("citations", []) or []
-                break
-        if answer:
-            break
-    if not answer and result.get("messages"):
-        answer = str(result["messages"][-1].content)
-    return intent, answer, citations
 
 
 @app.post("/api/ask", response_model=AskResponse)
 def ask(req: AskRequest) -> AskResponse:
-    result = docagent.invoke(
+    result = get_default_agent().invoke(
         {"question_input": {"question": req.question}},
         config={"recursion_limit": 12},
     )
-    intent, answer, citations = _extract(result)
+    o = extract_outcome(result)
     return AskResponse(
-        intent=intent,
-        answer=answer,
-        citations=citations,
-        trace=result.get("trace", []) or [],
+        kind=o["kind"],
+        intent=o["intent"],
+        answer=o["answer"],
+        question=o["question"],
+        citations=o["citations"],
+        unsupported=o["unsupported"],
+        trace=o["trace"],
     )
 
 

@@ -3,9 +3,9 @@
 import operator
 from typing import Annotated
 
-from pydantic import BaseModel, Field
-from typing_extensions import TypedDict, Literal
 from langgraph.graph import MessagesState
+from pydantic import BaseModel, Field
+from typing_extensions import Literal, TypedDict
 
 
 class IntentSchema(BaseModel):
@@ -30,11 +30,15 @@ class StateInput(TypedDict):
 class State(MessagesState):
     """Graph state. ``messages`` is inherited from MessagesState.
 
-    ``trace`` accumulates structured observability events (one per retrieval /
-    decision) via the ``operator.add`` reducer, so the whole agentic run can be
-    inspected after the fact.
+    - ``trace`` accumulates observability events (one per retrieval / decision).
+    - ``retrieved_locators`` accumulates every locator the agent actually
+      retrieved this run, so the final answer's citations can be *verified*
+      against what was really seen (not just trusted because the LLM emitted them).
+
+    Both use the ``operator.add`` reducer so the whole run is inspectable.
     """
 
     question_input: dict
     classification_decision: Literal["in_scope", "out_of_scope"]
     trace: Annotated[list, operator.add]
+    retrieved_locators: Annotated[list, operator.add]

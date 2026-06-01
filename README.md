@@ -18,7 +18,9 @@ reStructuredText, and PDF** (127 documents / ~1.25k chunks).
   cross-encoder rerank, then a relevance threshold (also how it says "not in the docs").
 - 🗂️ **Multi-format** — Markdown, reStructuredText, and PDF in one knowledge base,
   each citation carrying the right locator (`file.md:L10-30` or `file.pdf (p.3)`).
-- 📎 **Precise, forced citations** — the `Answer` tool *requires* citations.
+- 📎 **Verified citations** — the `Answer` tool *requires* citations, and each one
+  is **checked against what was actually retrieved**; unsupported (hallucinated)
+  locators are dropped rather than trusted.
 - 🧭 **Intent routing**, 🔭 **retrieval trace** (`--trace`), 🛡️ **robustness**
   (empty-KB / tool-failure / recursion guards).
 - 📊 **Quantitative evaluation** — intent / recall / answer / citation / refusal.
@@ -57,7 +59,7 @@ flowchart TB
 # 1. Environment (Python 3.11)
 conda create -n docagent python=3.11 -c conda-forge
 conda activate docagent
-pip install -e .
+pip install -e .          # extras: ".[dev]" tests/lint · ".[cli]" langgraph dev · ".[corpus]" rebuild PDF
 
 # 2. Configure the answer LLM
 cp .env.example .env          # put OPENAI_API_KEY in .env (or LLM_MODEL=ollama:llama3.1)
@@ -87,7 +89,7 @@ answer, the intent badge, citation chips, and a collapsible retrieval trace:
 python -m docagent.web   # http://127.0.0.1:8000
 ```
 
-API: `POST /api/ask {question}` → `{intent, answer, citations, trace}`,
+API: `POST /api/ask {question}` → `{kind, intent, answer, question, citations, unsupported, trace}`,
 `GET /api/sources` → the document list.
 
 ## Example run
@@ -155,13 +157,30 @@ Latest run over the bundled corpus (~1.25k chunks / 126 docs), answer LLM
 |---|---|
 | Intent routing accuracy | **10/10 (100%)** |
 | Retrieval recall (mean) | **0.94** |
-| Answer correctness (LLM-judged) | **7/8 (88%)** |
+| Answer correctness (LLM-judged) | **7–8/8 (88–100%, varies run-to-run)** |
 | Citation grounding | **8/8 (100%)** |
+| Hallucinated citations | **0** (every citation verified against retrieval) |
 | Refusal accuracy | **2/2 (100%)** |
 
-> When the corpus grew **6× (206 → ~1.25k chunks)**, retrieval quality held and
-> citation grounding rose to 100% — the hybrid retrieval + rerank scales. The
-> remaining gap is multi-hop synthesis (one question needs two documents at once).
+Hallucinated citations: **0** — every emitted citation was verified against what
+was actually retrieved. Retrieval quality held as the corpus grew 6× (206 →
+~1.25k chunks). This is a small, single-domain validation set: it exercises the
+pipeline, it does **not** prove general-purpose scale (see [Limitations](#limitations)).
+
+## Limitations
+
+This is a portfolio-grade local-docs RAG, not a production system. Known limits:
+
+- **Corpus scale** — the retriever loads all chunks and builds BM25 in memory at
+  startup. Fine for a local KB (≤ ~10k chunks); for 10⁵–10⁶ chunks it needs a
+  server-side sparse index and lazy loading.
+- **Citation verification is source-level** — citations are checked against the
+  retrieved locators (by file, and by exact locator when it matches), not yet by
+  re-verifying that each sentence is entailed by the cited span.
+- **Multi-hop** — questions that need two documents at once are the main accuracy
+  gap; sub-query decomposition is future work.
+- **Eval set is small & single-domain** (10 cases over Python-web docs) — enough
+  to exercise the pipeline, not to claim broad generalisation.
 
 ## Project layout
 

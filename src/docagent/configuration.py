@@ -8,7 +8,7 @@ knobs to the LangGraph runtime via ``configurable``.
 
 import os
 from dataclasses import dataclass, fields
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
@@ -31,6 +31,10 @@ DEFAULT_RERANKER_MODEL = os.environ.get(
 )
 # Minimum cross-encoder relevance score (a logit) to keep a chunk. Chunks below
 # this are dropped, which is what lets the agent honestly say "not in the docs".
+# Calibrated with scripts/calibrate_threshold.py: on the validation set in/out-of
+# -scope rerank scores are well separated (in-scope ~2.6–7.2, out-of-scope ~ -11),
+# so any threshold in [-2.5, 2.5] gives precision/recall/abstention = 1.0; 0.0 is
+# a safe midpoint. Re-run the calibration script if you change corpus/reranker.
 DEFAULT_SCORE_THRESHOLD = float(os.environ.get("SCORE_THRESHOLD", "0.0"))
 # RRF constant for reciprocal-rank fusion.
 DEFAULT_RRF_K = int(os.environ.get("RRF_K", "60"))
@@ -54,7 +58,7 @@ class Configuration:
 
     @classmethod
     def from_runnable_config(
-        cls, config: Optional[RunnableConfig] = None
+        cls, config: RunnableConfig | None = None
     ) -> "Configuration":
         """Create a Configuration from env vars first, then ``configurable``."""
         configurable = (

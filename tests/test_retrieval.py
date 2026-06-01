@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from docagent.ingest import load_documents, chunk_documents
-from docagent.vectorstore import get_vectorstore
+from docagent.ingest import chunk_documents, load_documents
 from docagent.retriever import HybridRetriever
+from docagent.vectorstore import get_vectorstore
 
 CORPUS = Path(__file__).parent.parent / "corpus" / "fastapi"
 

@@ -12,7 +12,7 @@ exact citations.
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import List, Optional
+from typing import List
 
 from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
@@ -37,9 +37,9 @@ class RetrievedChunk:
     source: str
     chunk_id: str
     score: float
-    start_line: Optional[int] = None
-    end_line: Optional[int] = None
-    page: Optional[int] = None
+    start_line: int | None = None
+    end_line: int | None = None
+    page: int | None = None
 
     @property
     def locator(self) -> str:
@@ -81,7 +81,16 @@ class HybridRetriever:
             for cid, text, meta in zip(self.ids, self.docs, self.metas)
         }
         self._bm25 = BM25Okapi([_tokenize(d) for d in self.docs]) if self.docs else None
-        self._reranker = _get_reranker(reranker_model)
+        # The cross-encoder is loaded lazily (only when a search actually runs),
+        # so cheap guards like `is_empty` don't drag in the reranker model.
+        self._reranker_model = reranker_model
+        self._reranker_obj = None
+
+    @property
+    def _reranker(self) -> CrossEncoder:
+        if self._reranker_obj is None:
+            self._reranker_obj = _get_reranker(self._reranker_model)
+        return self._reranker_obj
 
     @property
     def is_empty(self) -> bool:

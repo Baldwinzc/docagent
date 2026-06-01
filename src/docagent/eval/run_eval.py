@@ -2,27 +2,27 @@
 """Quantitative evaluation of docagent over docagent.eval.qa_dataset.
 
 Run from the project root, after ingesting the corpus:
-    python -m docagent.ingest --path ./corpus/fastapi --reset
+    python -m docagent.ingest --path ./corpus --reset
     python -m docagent.eval.run_eval
 
 Metrics:
     intent    - router decision matches expected (in_scope vs out_of_scope)
     recall    - expected source doc(s) present in retriever top-k
     answer    - LLM judges the final answer meets the criterion (in_scope cases)
-    citation  - citations point to an expected source (in_scope sourced cases)
+    citation  - verified citations point to an expected source (in_scope sourced)
     refusal   - out_of_scope / no_answer cases correctly declined
+Also reported: hallucinated citations (emitted but never retrieved) — should be 0.
 """
 
-import re
-
-from pydantic import BaseModel, Field
-from langchain.chat_models import init_chat_model
 from dotenv import load_dotenv
+from langchain.chat_models import init_chat_model
+from pydantic import BaseModel, Field
 
-from docagent.agent import docagent
-from docagent.retriever import get_retriever
+from docagent.agent import get_default_agent
 from docagent.configuration import DEFAULT_LLM_MODEL, DEFAULT_TOP_K
 from docagent.eval.qa_dataset import QA_CASES, qa_names
+from docagent.retriever import get_retriever
+from docagent.utils import extract_outcome, source_of
 
 load_dotenv()
 
@@ -36,38 +36,14 @@ _judge = init_chat_model(DEFAULT_LLM_MODEL).with_structured_output(Grade)
 
 JUDGE_SYS = (
     "You grade a document-QA assistant's answer against a single criterion. "
-    "Return correct=true only if the answer satisfies the criterion. When the "
-    "criterion requires declining, correct=true means the answer appropriately "
-    "declines or says the documents don't cover it (and does not fabricate)."
+    "Return correct=true only if the answer satisfies it. When the criterion "
+    "requires declining, correct=true means the answer appropriately declines or "
+    "says the documents don't cover it (and does not fabricate)."
 )
 
 
-def _source_of(locator: str) -> str:
-    """'file.md:L1-29' or 'file.pdf (p.3)' -> 'file...'."""
-    return re.split(r"[:(]", locator.strip())[0].strip()
-
-
-def _run_agent(question: str):
-    result = docagent.invoke(
-        {"question_input": {"question": question}}, config={"recursion_limit": 12}
-    )
-    intent = result.get("classification_decision")
-    answer, citations = "", []
-    for msg in reversed(result.get("messages", [])):
-        for tc in getattr(msg, "tool_calls", None) or []:
-            if tc["name"] == "Answer":
-                answer = tc["args"].get("answer", "")
-                citations = tc["args"].get("citations", []) or []
-                break
-        if answer:
-            break
-    if not answer and result.get("messages"):
-        answer = str(result["messages"][-1].content)
-    return intent, answer, citations
-
-
 def _judge_answer(criteria: str, question: str, answer: str) -> bool:
-    grade = _judge.invoke(
+    g = _judge.invoke(
         [
             {"role": "system", "content": JUDGE_SYS},
             {
@@ -76,7 +52,7 @@ def _judge_answer(criteria: str, question: str, answer: str) -> bool:
             },
         ]
     )
-    return bool(grade.correct)
+    return bool(g.correct)
 
 
 def _mark(v):
@@ -89,10 +65,11 @@ def _mark(v):
 
 def main():
     retriever = get_retriever()
+    agent = get_default_agent()
     print(f"Corpus: {len(retriever.docs)} chunks / {len(retriever.list_sources())} docs\n")
 
     intent_c = intent_t = ans_c = ans_t = cite_c = cite_t = ref_c = ref_t = 0
-    recalls = []
+    recalls, hallucinated = [], 0
 
     header = f"{'case':<22}{'intent':<8}{'recall':<8}{'answer':<8}{'citation':<10}{'refusal':<8}"
     print(header)
@@ -105,14 +82,19 @@ def main():
         exp_router = "out_of_scope" if exp_intent == "out_of_scope" else "in_scope"
 
         hits = retriever.search(q, k=DEFAULT_TOP_K)
-        retrieved = {h.source for h in hits}
+        retrieved = {h.source.rsplit("/", 1)[-1] for h in hits}  # compare by basename
         recall = None
         if exp_sources:
             recall = len(exp_sources & retrieved) / len(exp_sources)
             recalls.append(recall)
 
-        intent, answer, citations = _run_agent(q)
-        cited = {_source_of(c) for c in citations}
+        result = agent.invoke(
+            {"question_input": {"question": q}}, config={"recursion_limit": 12}
+        )
+        o = extract_outcome(result)
+        intent, answer = o["intent"], o["answer"]
+        cited = {source_of(c).rsplit("/", 1)[-1] for c in o["citations"]}
+        hallucinated += len(o["unsupported"])
 
         intent_ok = intent == exp_router
         intent_c += int(intent_ok)
@@ -122,7 +104,7 @@ def main():
 
         cite_ok = None
         if exp_intent == "in_scope" and exp_sources:
-            cite_ok = len(cited & exp_sources) > 0
+            cite_ok = bool(cited & exp_sources) and not o["unsupported"]
             cite_c += int(cite_ok)
             cite_t += 1
 
@@ -153,6 +135,7 @@ def main():
     print(f"Answer correctness      : {pct(ans_c, ans_t)}")
     print(f"Citation grounding      : {pct(cite_c, cite_t)}")
     print(f"Refusal accuracy        : {pct(ref_c, ref_t)}")
+    print(f"Hallucinated citations  : {hallucinated} (lower is better; verified vs retrieval)")
 
 
 if __name__ == "__main__":

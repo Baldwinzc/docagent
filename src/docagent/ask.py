@@ -2,7 +2,7 @@
 """CLI: ask the local knowledge base a question.
 
 Usage:
-    python -m docagent.ask "How do I declare a path parameter with a type?"
+    python -m docagent.ask "How do I declare an integer path parameter?"
     python -m docagent.ask --trace "..."     # also print the retrieval trace
 """
 
@@ -10,7 +10,8 @@ import argparse
 
 from dotenv import load_dotenv
 
-from docagent.agent import docagent
+from docagent.agent import get_default_agent
+from docagent.utils import extract_outcome
 
 
 def _print_trace(result: dict) -> None:
@@ -21,32 +22,26 @@ def _print_trace(result: dict) -> None:
     for i, t in enumerate(trace, 1):
         if t.get("step") == "search_docs":
             print(f"  {i}. search_docs  query={t.get('query')!r}")
-        elif t.get("step") == "intent":
-            print(f"  {i}. intent       decision={t.get('decision')}")
         else:
-            print(f"  {i}. {t.get('step')}  {t}")
+            print(f"  {i}. {t.get('step')}")
     print()
 
 
-def _print_result(result: dict) -> None:
-    """Pretty-print the final Answer (with citations) or the refusal."""
-    messages = result.get("messages", [])
-    for msg in reversed(messages):
-        tool_calls = getattr(msg, "tool_calls", None)
-        if tool_calls:
-            for tc in tool_calls:
-                if tc["name"] == "Answer":
-                    args = tc["args"]
-                    print("=== Answer ===")
-                    print(args.get("answer", "").strip())
-                    citations = args.get("citations", []) or []
-                    if citations:
-                        print("\n=== Citations ===")
-                        for c in citations:
-                            print(f"- {c}")
-                    return
-    if messages:
-        print(str(messages[-1].content).strip())
+def _print_outcome(o: dict) -> None:
+    if o["kind"] == "question":
+        print("=== Clarifying question ===")
+        print(o["question"].strip())
+        return
+    print("=== Answer ===")
+    print(o["answer"].strip())
+    if o["citations"]:
+        print("\n=== Citations ===")
+        for c in o["citations"]:
+            print(f"- {c}")
+    if o["unsupported"]:
+        print("\n=== Unsupported citations (dropped — not actually retrieved) ===")
+        for c in o["unsupported"]:
+            print(f"- {c}")
 
 
 def main():
@@ -60,14 +55,14 @@ def main():
     )
     args = parser.parse_args()
 
-    result = docagent.invoke(
+    result = get_default_agent().invoke(
         {"question_input": {"question": args.question}},
         config={"recursion_limit": 12},
     )
 
     if args.trace:
         _print_trace(result)
-    _print_result(result)
+    _print_outcome(extract_outcome(result))
 
 
 if __name__ == "__main__":
