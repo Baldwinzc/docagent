@@ -34,7 +34,7 @@ from docagent.prompts import (
 )
 from docagent.retriever import get_retriever
 from docagent.schemas import IntentSchema, State, StateInput
-from docagent.tools import get_tools, get_tools_by_name
+from docagent.tools import get_tools_by_name, make_retrieval_tools
 
 TERMINAL_TOOLS = {"Answer", "Question"}
 # matches "locator: <loc>  (relevance" in search_docs output
@@ -49,7 +49,8 @@ def build_agent(config: Configuration | None = None):
     """
     config = config or Configuration.from_runnable_config()
 
-    tools = get_tools()
+    retriever = get_retriever(config.chroma_path, config.collection_name)
+    tools = make_retrieval_tools(retriever, config.top_k, config.score_threshold)
     tools_by_name = get_tools_by_name(tools)
     llm = init_chat_model(config.llm_model, temperature=0.0)
     llm_router = llm.with_structured_output(IntentSchema)
@@ -112,7 +113,7 @@ def build_agent(config: Configuration | None = None):
         """Guard an empty KB, then decide if the question is worth retrieving for."""
         question = state["question_input"].get("question", "")
 
-        if get_retriever(config.chroma_path, config.collection_name).is_empty:
+        if retriever.is_empty:
             return Command(
                 goto=END,
                 update={

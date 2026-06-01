@@ -1,7 +1,7 @@
 [project]
 name = "docagent"
 version = "0.1.0"
-description = "Agentic RAG agent that answers questions over your local documents, with verified citations"
+description = "Chat with your papers and docs — fully local agentic RAG with page-precise, verified citations"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "langchain>=1.0.0",
@@ -22,8 +22,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-xdist", "ruff>=0.6.1", "mypy>=1.11.1"]
-cli = ["langgraph-cli[inmem]>=0.4.0"]   # for `langgraph dev`
-corpus = ["reportlab>=4.0.0"]           # for scripts/build_corpus.py (PDF)
+cli = ["langgraph-cli[inmem]>=0.4.0"]    # for `langgraph dev`
+ollama = ["langchain-ollama>=0.2.0"]     # for LLM_MODEL=ollama:... (fully local)
 
 [build-system]
 requires = ["setuptools>=73.0.0", "wheel"]

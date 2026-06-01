@@ -1,50 +1,15 @@
 """Retrieval tools for the document QA agent.
 
-`search_docs` runs the hybrid retriever (dense + BM25 -> RRF -> cross-encoder
-rerank -> relevance threshold) and returns ranked chunks with **precise source
-locators**, so the agent can cite exactly where each fact came from. The
-terminal `Answer` tool forces citations, so no claim ships ungrounded.
+The search/list tools are produced by ``make_retrieval_tools(retriever, top_k,
+score_threshold)`` so they are **bound to the same retriever and config the agent
+was built with** — no falling back to a global default. The terminal ``Answer``
+tool forces citations (verified downstream); ``Question`` asks for clarification.
 """
 
 from typing import List
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-
-from docagent.configuration import DEFAULT_TOP_K
-from docagent.retriever import get_retriever
-
-
-@tool
-def search_docs(query: str, k: int = DEFAULT_TOP_K) -> str:
-    """Search the knowledge base; return reranked chunks with source locators.
-
-    Each result is labelled with a precise locator (``file:Lstart-Lend`` or a
-    PDF page) and a relevance score. Cite these locators in your final Answer.
-    Call again with a reformulated query if the results are weak.
-    """
-    chunks = get_retriever().search(query, k=k)
-    if not chunks:
-        return (
-            "No sufficiently relevant chunks found. The knowledge base likely "
-            "does not cover this — reformulate the query, or if it still finds "
-            "nothing, tell the user the answer is not in the documents."
-        )
-    blocks = []
-    for i, c in enumerate(chunks, 1):
-        blocks.append(
-            f"[{i}] locator: {c.locator}  (relevance {c.score:.2f})\n{c.text.strip()}"
-        )
-    return "\n\n".join(blocks)
-
-
-@tool
-def list_sources() -> str:
-    """List the distinct documents currently in the knowledge base."""
-    sources = get_retriever().list_sources()
-    if not sources:
-        return "The knowledge base is empty. Run the ingest script first."
-    return "Documents in the knowledge base:\n" + "\n".join(f"- {s}" for s in sources)
 
 
 @tool
@@ -66,3 +31,47 @@ class Question(BaseModel):
     """Ask the user a clarifying question when the request is too ambiguous."""
 
     content: str = Field(description="The clarifying question to ask the user.")
+
+
+def make_retrieval_tools(retriever, top_k: int, score_threshold: float) -> list:
+    """Build search/list tools bound to a specific retriever + config.
+
+    Returns ``[search_docs, list_sources, Answer, Question]``. ``search_docs``
+    and ``list_sources`` close over ``retriever`` so the agent searches exactly
+    the collection it was configured with, at the configured ``top_k`` /
+    ``score_threshold`` — not a global default.
+    """
+
+    @tool
+    def search_docs(query: str, k: int = top_k) -> str:
+        """Search the knowledge base; return reranked chunks with source locators.
+
+        Each result is labelled with a precise locator (``file:Lstart-Lend`` or a
+        PDF page) and a relevance score. Cite these locators in your final Answer.
+        Call again with a reformulated query if the results are weak.
+        """
+        chunks = retriever.search(query, k=k, score_threshold=score_threshold)
+        if not chunks:
+            return (
+                "No sufficiently relevant chunks found. The knowledge base likely "
+                "does not cover this — reformulate the query, or if it still finds "
+                "nothing, tell the user the answer is not in the documents."
+            )
+        blocks = []
+        for i, c in enumerate(chunks, 1):
+            blocks.append(
+                f"[{i}] locator: {c.locator}  (relevance {c.score:.2f})\n{c.text.strip()}"
+            )
+        return "\n\n".join(blocks)
+
+    @tool
+    def list_sources() -> str:
+        """List the distinct documents currently in the knowledge base."""
+        sources = retriever.list_sources()
+        if not sources:
+            return "The knowledge base is empty. Run the ingest script first."
+        return "Documents in the knowledge base:\n" + "\n".join(
+            f"- {s}" for s in sources
+        )
+
+    return [search_docs, list_sources, Answer, Question]

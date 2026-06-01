@@ -1,31 +1,95 @@
-# docagent — agentic RAG over your local documents
+# docagent — chat with your papers, fully local
 
 **English** | [中文](README.zh-CN.md)
 
-Ask natural-language questions over a real documentation corpus and get answers
-that **cite their exact source location** (file + line range, or PDF page). Built
-on [LangGraph](https://langchain-ai.github.io/langgraph/), with a hybrid
-retrieval pipeline, a quantitative eval harness, and a small web UI.
+Ask questions across a pile of papers (or any local docs) and get answers with
+**page-precise, verified citations** — running **entirely on your machine**. Built
+on [LangGraph](https://langchain-ai.github.io/langgraph/).
 
-The bundled knowledge base is themed: **Modern Python Web Development** — the
-FastAPI docs plus the Python typing/async PEPs they build on — across **Markdown,
-reStructuredText, and PDF** (127 documents / ~1.25k chunks).
+Cloud paper tools (ChatPDF, Elicit, …) make you **upload your PDFs**. docagent
+doesn't: embeddings run locally, papers never leave your disk (`papers/` is
+gitignored), and you can even run the answer model locally via Ollama. What you
+get back is grounded — every citation is checked against what was actually
+retrieved, down to the **PDF page**.
 
-## Features
+## Why it's different
 
-- 🔁 **Agentic retrieval** — search, inspect, reformulate, search again, then answer.
-- 🧪 **Hybrid retrieval + rerank** — dense (bge) **+** BM25 fused with RRF, then a
-  cross-encoder rerank, then a relevance threshold (also how it says "not in the docs").
-- 🗂️ **Multi-format** — Markdown, reStructuredText, and PDF in one knowledge base,
-  each citation carrying the right locator (`file.md:L10-30` or `file.pdf (p.3)`).
-- 📎 **Verified citations** — the `Answer` tool *requires* citations, and each one
-  is **checked against what was actually retrieved**; unsupported (hallucinated)
-  locators are dropped rather than trusted.
-- 🧭 **Intent routing**, 🔭 **retrieval trace** (`--trace`), 🛡️ **robustness**
-  (empty-KB / tool-failure / recursion guards).
-- 📊 **Quantitative evaluation** — intent / recall / answer / citation / refusal.
-- 💬 **Web UI** — a small FastAPI + static chat front-end.
-- 🔒 **Local embeddings, no API key** for retrieval; only the answer LLM needs one.
+- 🔒 **Fully local / private** — your PDFs are never uploaded; local embeddings,
+  optional local LLM (Ollama). Good for unpublished or sensitive papers.
+- 📎 **Page-precise, verified citations** — answers cite `paper.pdf (p.3)`; cited
+  locators are **checked against retrieval**, hallucinated ones are dropped.
+- 🔗 **Cross-paper synthesis** — the agent searches, re-queries, and combines
+  facts from multiple papers in one answer.
+- 🙅 **Honest refusal** — if the papers don't cover it, it says so (relevance
+  threshold), instead of making something up.
+- 🧪 **Real retrieval** — hybrid dense (bge) + BM25 → RRF → cross-encoder rerank.
+- 💬 **CLI + Web UI**, 🔭 **retrieval trace**, 📊 **eval harness**, multi-format
+  (PDF / Markdown / RST / text).
+
+## Quickstart
+
+```bash
+# 1. Environment (Python 3.11)
+conda create -n docagent python=3.11 -c conda-forge
+conda activate docagent
+pip install -e .
+
+# 2. Answer LLM: put OPENAI_API_KEY in .env — or go fully local:
+cp .env.example .env
+#   pip install -e ".[ollama]"  &&  set LLM_MODEL=ollama:llama3.1 in .env
+
+# 3. Get some papers (downloaded locally, never uploaded) and index them
+python scripts/fetch_arxiv.py --demo          # Attention, RAG, BERT
+#   or: python scripts/fetch_arxiv.py 1706.03762 2005.11401  (any arXiv ids)
+python -m docagent.ingest --path ./papers --reset
+
+# 4. Ask
+python -m docagent.ask --trace "How is BERT related to the Transformer?"
+#   or the web UI:
+python -m docagent.web        # http://127.0.0.1:8000
+```
+
+Point `ingest --path` at any folder of your own `.pdf` / `.md` / `.rst` / `.txt`.
+
+## Example run
+
+A **cross-paper** question — the agent searches, lists sources, re-queries, then
+answers from two papers with page citations (real output):
+
+```console
+$ python -m docagent.ask --trace "How does retrieval-augmented generation use a retriever, and how is BERT related to the Transformer architecture?"
+🔎 Intent: IN_SCOPE — retrieving from knowledge base
+=== trace ===
+  1. search_docs  query='retrieval-augmented generation retriever BERT Transformer architecture'
+  2. list_sources
+  3. search_docs  query='BERT Transformer architecture bidirectional encoder layers'
+
+=== Answer ===
+RAG uses a retriever to access a dense vector index … the retriever provides
+latent documents conditioned on the input, and the model marginalizes over
+seq2seq predictions given different retrieved documents
+[retrieval-augmented-generation.pdf (p.1); retrieval-augmented-generation.pdf (p.2)].
+BERT is a multi-layer bidirectional Transformer encoder, based on the original
+Transformer [bert.pdf (p.1); bert.pdf (p.3)].
+
+=== Citations ===
+- retrieval-augmented-generation.pdf (p.1)
+- bert.pdf (p.1)
+- bert.pdf (p.3)
+```
+
+Out-of-scope questions are declined; offline, `python scripts/check_retrieval.py`
+shows the raw retrieval stack with no API key.
+
+## Web UI
+
+![docagent web UI](docs/ui-answer.png)
+
+A small chat front-end (FastAPI + a static Tailwind page) showing the answer, the
+intent badge, citation chips, dropped (unsupported) citations, and a collapsible
+retrieval trace. `python -m docagent.web` → http://127.0.0.1:8000.
+
+API: `POST /api/ask {question}` → `{kind, intent, answer, question, citations, unsupported, trace}`.
 
 ## Architecture
 
@@ -37,10 +101,9 @@ flowchart TB
     L --> C{terminal tool?}
     C -- search_docs --> E[environment]
     E --> L
-    C -- Answer --> X([END · answer + citations])
+    C -- Answer --> X([END · answer + verified citations])
 
     E -.calls.-> PIPE
-
     subgraph PIPE [hybrid retrieval pipeline]
       direction TB
       Q[query] --> DENSE[dense · bge]
@@ -49,171 +112,81 @@ flowchart TB
       BM25 --> RRF
       RRF --> RERANK[cross-encoder rerank]
       RERANK --> THRESH[relevance threshold]
-      THRESH --> OUT2[top-k chunks + locators]
+      THRESH --> OUT2[top-k chunks + page/line locators]
     end
 ```
 
-## Quickstart
-
-```bash
-# 1. Environment (Python 3.11)
-conda create -n docagent python=3.11 -c conda-forge
-conda activate docagent
-pip install -e .          # extras: ".[dev]" tests/lint · ".[cli]" langgraph dev · ".[corpus]" rebuild PDF
-
-# 2. Configure the answer LLM
-cp .env.example .env          # put OPENAI_API_KEY in .env (or LLM_MODEL=ollama:llama3.1)
-
-# 3. Build the corpus (FastAPI docs + PEPs + a PDF) and index it
-python scripts/build_corpus.py
-python -m docagent.ingest --path ./corpus --reset
-
-# 4a. Ask from the CLI
-python -m docagent.ask --trace "How do I declare an integer path parameter?"
-
-# 4b. …or launch the web UI
-python -m docagent.web        # open http://127.0.0.1:8000
-```
-
-Point `ingest --path` at any folder of your own `.md` / `.rst` / `.txt` / `.pdf`
-files to build a knowledge base over your own documents.
-
-## Web UI
-
-![docagent web UI](docs/ui-answer.png)
-
-A small chat front-end (FastAPI backend + a static Tailwind page) shows the
-answer, the intent badge, citation chips, and a collapsible retrieval trace:
-
-```bash
-python -m docagent.web   # http://127.0.0.1:8000
-```
-
-API: `POST /api/ask {question}` → `{kind, intent, answer, question, citations, unsupported, trace}`,
-`GET /api/sources` → the document list.
-
-## Example run
-
-**Cross-format retrieval** (the probe, no API key — `python scripts/check_retrieval.py`):
-
-```console
-Q: What does PEP 484 specify about type hints?
-   pep-0484.rst:L1-25                 score= 5.42  'PEP: 484 Title: Type Hints ...'
-Q: What are protocols and structural subtyping?
-   pep-0544-protocols.pdf (p.1)       score= 5.07  'PEP: 544 Title: Protocols: Structural subtyping ...'
-Q: What is the capital of France?
-   (no chunk passed the relevance threshold)
-```
-
-**In-scope question** (CLI):
-
-```console
-$ python -m docagent.ask --trace "How do I declare a path parameter that must be an integer, and what does FastAPI do if the client sends a non-integer?"
-🔎 Intent: IN_SCOPE — retrieving from knowledge base
-=== trace ===
-  1. search_docs  query='FastAPI path parameter integer non-integer validation'
-
-=== Answer ===
-Declare the path parameter with a Python type annotation, e.g. `item_id: int`.
-FastAPI validates it and returns a validation error for a non-integer
-[tutorial-path-params.md:L65-91].
-
-=== Citations ===
-- tutorial-path-params.md:L65-91
-```
-
-## Corpus
-
-Themed, multi-format, reproducible:
-
-| Source | Format | Count | License |
-|---|---|---|---|
-| FastAPI docs (tutorial / advanced / how-to / deployment) | Markdown | 119 | MIT |
-| Python PEPs (484, 492, 8, 257, 20, 585, 604) | reStructuredText | 7 | PSF |
-| PEP 544 (Protocols) rendered to PDF | PDF | 1 | PSF |
-
-Rebuild any time with `python scripts/build_corpus.py` (see `corpus/SOURCE.md`
-for attribution).
-
-## Retrieval pipeline
-
-`search_docs` is not naive top-k cosine. Per query: **dense** (`bge-small-en-v1.5`)
-+ **BM25** → **RRF fusion** → **cross-encoder rerank** (`ms-marco-MiniLM-L-6-v2`)
-→ **relevance threshold**. Each surviving chunk keeps a precise locator for citation.
+The agent is built by `build_agent(config)` — no model/reranker is initialised at
+import time; tools are bound to the configured retriever (`make_retrieval_tools`).
 
 ## Evaluation
 
-A labelled QA set (`src/docagent/eval/qa_dataset.py`) covers single-doc,
-multi-hop, out-of-scope, and unanswerable questions:
+Labelled QA over the demo papers (`src/docagent/eval/qa_dataset.py`): single-paper,
+multi-hop, out-of-scope, and unanswerable questions.
 
 ```bash
+python scripts/fetch_arxiv.py --demo && python -m docagent.ingest --path ./papers --reset
 python -m docagent.eval.run_eval
 ```
 
-Latest run over the bundled corpus (~1.25k chunks / 126 docs), answer LLM
-`gpt-5.4-mini`:
-
 | Metric | Result |
 |---|---|
-| Intent routing accuracy | **10/10 (100%)** |
-| Retrieval recall (mean) | **0.94** |
-| Answer correctness (LLM-judged) | **7–8/8 (88–100%, varies run-to-run)** |
-| Citation grounding | **8/8 (100%)** |
-| Hallucinated citations | **0** (every citation verified against retrieval) |
+| Intent routing accuracy | **8/8 (100%)** |
+| Retrieval recall (mean) | **0.92** |
+| Answer correctness (LLM-judged) | **6/6 (100%)** |
+| Citation grounding | **6/6 (100%)** |
+| Hallucinated citations | **0** |
 | Refusal accuracy | **2/2 (100%)** |
 
-Hallucinated citations: **0** — every emitted citation was verified against what
-was actually retrieved. Retrieval quality held as the corpus grew 6× (206 →
-~1.25k chunks). This is a small, single-domain validation set: it exercises the
-pipeline, it does **not** prove general-purpose scale (see [Limitations](#limitations)).
+> Over the 3 demo papers (220 chunks). The hardest case is multi-hop — recall 0.50
+> on the one question that needs two papers at once, though its answer/citation
+> still came out correct.
 
 ## Limitations
 
-This is a portfolio-grade local-docs RAG, not a production system. Known limits:
+Portfolio-grade local RAG, not a production system. Known limits:
 
 - **Corpus scale** — the retriever loads all chunks and builds BM25 in memory at
-  startup. Fine for a local KB (≤ ~10k chunks); for 10⁵–10⁶ chunks it needs a
-  server-side sparse index and lazy loading.
-- **Citation verification is source-level** — citations are checked against the
-  retrieved locators (by file, and by exact locator when it matches), not yet by
-  re-verifying that each sentence is entailed by the cited span.
-- **Multi-hop** — questions that need two documents at once are the main accuracy
-  gap; sub-query decomposition is future work.
-- **Eval set is small & single-domain** (10 cases over Python-web docs) — enough
-  to exercise the pipeline, not to claim broad generalisation.
+  startup; fine for a personal paper library (≤ ~10k chunks), not 10⁵–10⁶.
+- **Citation verification is source/page-level** — checked against retrieved
+  locators, not yet per-sentence entailment of the cited span.
+- **Multi-hop** — questions needing several papers at once are the hardest case.
+- **Eval set is small** (8 cases over 3 papers) — it exercises the pipeline, it
+  doesn't prove broad generalisation.
 
 ## Project layout
 
 ```
 src/docagent/
-├── agent.py            # LangGraph: intent_router + response loop + trace/guards
+├── agent.py            # LangGraph factory: intent_router + response loop + trace
 ├── retriever.py        # hybrid: dense+BM25 -> RRF -> rerank -> threshold
-├── ingest.py           # load -> chunk (+line/page provenance) -> embed -> Chroma
-├── ask.py / web.py     # CLI / FastAPI+static web UI
-├── static/index.html   # chat front-end (Tailwind)
-├── vectorstore.py, configuration.py, prompts.py, schemas.py
-├── tools/              # search_docs, list_sources, Answer, Question
+├── ingest.py           # load -> chunk (+page/line provenance) -> embed -> Chroma
+├── ask.py / web.py     # CLI / FastAPI + static web UI
+├── tools/              # make_retrieval_tools(retriever, cfg); Answer, Question
+├── utils.py            # extract_outcome(): citation verification
 └── eval/               # qa_dataset.py + run_eval.py
-corpus/{fastapi,peps,pdf}/   # themed multi-format demo corpus
-scripts/                # build_corpus.py, check_retrieval.py, check_web.py
-tests/                  # retrieval tests (no key) + LLM end-to-end tests
+scripts/                # fetch_arxiv.py · check_retrieval.py · calibrate_threshold.py
+sample_notes/           # bundled offline corpus (CI / quick try; no download)
+tests/                  # test_unit.py (offline) + test_retrieval.py + test_response.py
 ```
 
 ## Testing
 
 ```bash
-python tests/run_all_tests.py          # retrieval tests only (no API key)
-python tests/run_all_tests.py --all    # + LLM end-to-end (needs API key)
+python tests/run_all_tests.py          # offline retrieval tests (no API key)
+python tests/run_all_tests.py --all    # + LLM end-to-end (needs key + ingested papers)
 ```
+
+CI runs ruff, offline unit tests (no network/model), retrieval tests over
+`sample_notes`, and a wheel-packages-the-UI smoke test.
 
 ## Configuration
 
-Key settings in `.env` (see `.env.example`): `OPENAI_API_KEY`, `LLM_MODEL`
-(default `openai:gpt-4.1`; any `init_chat_model` id), `EMBEDDING_MODEL`
-(`BAAI/bge-small-en-v1.5`), `RERANKER_MODEL`
-(`cross-encoder/ms-marco-MiniLM-L-6-v2`), `TOP_K`/`CANDIDATE_K` (`4`/`20`),
-`SCORE_THRESHOLD` (`0.0`), `CHROMA_PATH`/`CHROMA_COLLECTION`,
-`CHUNK_SIZE`/`CHUNK_OVERLAP`.
+`.env` (see `.env.example`): `OPENAI_API_KEY`, `LLM_MODEL` (default
+`openai:gpt-4.1`; any `init_chat_model` id incl. `ollama:llama3.1`),
+`EMBEDDING_MODEL` (`BAAI/bge-small-en-v1.5`), `RERANKER_MODEL`,
+`TOP_K`/`CANDIDATE_K`, `SCORE_THRESHOLD` (calibrated; see
+`scripts/calibrate_threshold.py`), `CHROMA_PATH`/`CHROMA_COLLECTION`.
 
 ## Tech stack
 
@@ -222,5 +195,5 @@ cross-encoder · pypdf · FastAPI · Tailwind
 
 ## License
 
-MIT (this project). The demo corpus under `corpus/` redistributes FastAPI docs
-(MIT) and Python PEPs (PSF) — see `corpus/SOURCE.md`.
+MIT. Demo papers are downloaded from arXiv locally and are **not** redistributed
+in this repo; they remain under their authors' terms.

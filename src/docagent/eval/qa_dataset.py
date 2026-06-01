@@ -1,86 +1,72 @@
-"""QA evaluation dataset over the FastAPI documentation corpus.
+"""QA evaluation dataset over the demo arXiv papers.
 
-Each case carries the expected intent, the expected source document(s) (for
-retrieval-recall scoring), and a grading criterion (for LLM-judged answer
-correctness). The set deliberately includes:
-  - single-doc factual questions,
-  - a multi-hop question spanning two docs,
-  - an out-of-scope question (should be declined by the router),
-  - an in-domain-sounding but unanswerable question (the docs don't cover it,
-    so the agent must honestly say so rather than fabricate).
+Reproducible: download the same papers first, then run the eval:
+    python scripts/fetch_arxiv.py --demo
+    python -m docagent.ingest --path ./papers --reset
+    python -m docagent.eval.run_eval
 
-Ingest the corpus first:  python -m docagent.ingest --path ./corpus/fastapi --reset
+The set covers single-paper facts, a multi-hop question spanning two papers, an
+out-of-scope question (router should decline), and an in-domain-sounding but
+unanswerable question (the papers don't cover it, so the agent must say so).
 """
 
 QA_CASES = [
     {
-        "question": "How do I declare a path parameter that must be an integer, and what happens if the client sends a non-integer?",
+        "question": "What problem with recurrent models does the Transformer's attention mechanism address?",
         "intent": "in_scope",
-        "expected_sources": ["tutorial-path-params.md"],
-        "criteria": "Explains declaring the path param with a type like `item_id: int`, and that a non-integer value produces a validation error.",
+        "expected_sources": ["attention-is-all-you-need.pdf"],
+        "criteria": "The Transformer replaces recurrence with attention, enabling parallelization and better long-range dependencies.",
     },
     {
-        "question": "What is the difference between path parameters and query parameters?",
+        "question": "What is scaled dot-product attention and why is the 1/sqrt(d_k) scaling used?",
         "intent": "in_scope",
-        "expected_sources": ["tutorial-query-params.md"],
-        "criteria": "Path parameters are part of the URL path; query parameters come after `?` as key-value pairs and can be optional / have defaults.",
+        "expected_sources": ["attention-is-all-you-need.pdf"],
+        "criteria": "Attention = softmax(QKᵀ/sqrt(d_k))V; the scaling keeps dot products from getting large and pushing softmax into small-gradient regions.",
     },
     {
-        "question": "How do I return a specific HTTP error response to the client?",
+        "question": "How does retrieval-augmented generation combine a retriever with a generator?",
         "intent": "in_scope",
-        "expected_sources": ["tutorial-handling-errors.md"],
-        "criteria": "Mentions raising `HTTPException` with a status_code and detail.",
+        "expected_sources": ["retrieval-augmented-generation.pdf"],
+        "criteria": "A retriever fetches relevant passages from an external index; the generator conditions on them (marginalizing over retrieved documents).",
     },
     {
-        "question": "How do I declare and receive a JSON request body?",
+        "question": "What pre-training objectives does BERT use?",
         "intent": "in_scope",
-        "expected_sources": ["tutorial-body.md"],
-        "criteria": "Declare a Pydantic `BaseModel` and use it as a function parameter type to receive the body.",
+        "expected_sources": ["bert.pdf"],
+        "criteria": "Masked language modeling (masked tokens) and next-sentence prediction.",
     },
     {
-        "question": "When should I use async def versus a normal def for a path operation function?",
+        "question": "Does RAG rely on the model's parametric memory or on a non-parametric memory?",
         "intent": "in_scope",
-        "expected_sources": ["async.md"],
-        "criteria": "Use `async def` when using awaitable libraries; plain `def` functions are run by FastAPI in an external threadpool.",
+        "expected_sources": ["retrieval-augmented-generation.pdf"],
+        "criteria": "A non-parametric memory — an external retrievable index — combined with the parametric model.",
     },
     {
-        "question": "What is dependency injection used for in FastAPI?",
+        "question": "How is BERT related to the Transformer architecture?",
         "intent": "in_scope",
-        "expected_sources": ["tutorial-dependencies-index.md"],
-        "criteria": "Lets you declare shared dependencies via `Depends` to reuse logic (auth, db sessions, common params).",
-    },
-    {
-        "question": "How can I add minimum and maximum length validation to a string query parameter?",
-        "intent": "in_scope",
-        "expected_sources": ["tutorial-query-params-str-validations.md"],
-        "criteria": "Use `Query` (typically with `Annotated`) and set `min_length` / `max_length`.",
-    },
-    {
-        "question": "How do I declare an integer path parameter and also give a query parameter a default value?",
-        "intent": "in_scope",
-        "expected_sources": ["tutorial-path-params.md", "tutorial-query-params.md"],
-        "criteria": "Covers both: typing the path param as `int`, and giving a query parameter a default value in the function signature.",
+        "expected_sources": ["bert.pdf", "attention-is-all-you-need.pdf"],
+        "criteria": "BERT is a multi-layer bidirectional Transformer encoder, built on the Transformer architecture.",
     },
     {
         "question": "What is the capital of France?",
         "intent": "out_of_scope",
         "expected_sources": [],
-        "criteria": "Declines / states the question is outside the scope of the documents; does not answer 'Paris'.",
+        "criteria": "Declines / states the question is outside the scope of the papers; does not answer 'Paris'.",
     },
     {
-        "question": "How do I train a convolutional neural network in PyTorch?",
+        "question": "How do I deploy a FastAPI application to production with Docker?",
         "intent": "no_answer",
         "expected_sources": [],
-        "criteria": "Honestly states the documents do not cover this topic; does NOT fabricate PyTorch instructions.",
+        "criteria": "Honestly states the papers do not cover this; does NOT fabricate deployment instructions.",
     },
 ]
 
-# --- Derived views (kept for the pytest suite in tests/test_response.py) ---
+# --- Derived views (used by tests/test_response.py) ---
 qa_inputs = [{"question": c["question"]} for c in QA_CASES]
 qa_names = [
-    "path_param_int", "path_vs_query", "http_error", "request_body",
-    "async_vs_def", "dependency_injection", "str_validation",
-    "multi_hop_path_query", "out_of_scope_geo", "no_answer_pytorch",
+    "transformer_vs_rnn", "scaled_attention", "rag_retriever_generator",
+    "bert_pretraining", "rag_nonparametric", "bert_is_transformer",
+    "out_of_scope_geo", "no_answer_deploy",
 ]
 intent_outputs = [c["intent"] for c in QA_CASES]
 response_criteria_list = [c["criteria"] for c in QA_CASES]

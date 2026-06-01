@@ -10,10 +10,9 @@ No LLM / API key needed — this exercises only the retrieval stack
 from docagent.retriever import get_retriever
 
 QUERIES = [
-    "How does FastAPI handle a normal def (sync) path operation function?",
-    "How do I declare a path parameter with an integer type?",
-    "What does PEP 484 specify about type hints?",        # -> peps/*.rst
-    "What are protocols and structural subtyping?",       # -> pdf (page-cited)
+    "What is scaled dot-product attention?",
+    "How does retrieval-augmented generation use a retriever?",
+    "What pre-training objectives does BERT use?",
     "What is the capital of France?",  # out of scope -> should be empty
 ]
 
