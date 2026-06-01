@@ -143,6 +143,19 @@
 
     $form.addEventListener("submit", e => { e.preventDefault(); ask(); });
     $q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } });
+
+    // ?demo — render one real sample exchange (offline preview / screenshots)
+    if (new URLSearchParams(location.search).has("demo")) {
+      const DEMO = {
+        intent: "in_scope",
+        answer: "Declare the path parameter with a standard Python type annotation, e.g. `item_id: int` in the path operation function. FastAPI then validates the incoming value and returns a `422` validation error if the client sends something that is not an integer [tutorial-path-params.md:L65-91].",
+        citations: ["tutorial-path-params.md:L65-91", "tutorial-path-params.md:L89-107"],
+        trace: [{ step: "search_docs", query: "FastAPI path parameter integer non-integer validation" }],
+      };
+      $messages.appendChild(userBubble("How do I declare a path parameter that must be an integer, and what happens if the client sends a non-integer?"));
+      $messages.appendChild(answerCard(DEMO));
+      scroll();
+    }
   </script>
 </body>
 </html>

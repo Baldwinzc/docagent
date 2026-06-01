@@ -78,6 +78,8 @@ files to build a knowledge base over your own documents.
 
 ## Web UI
 
+![docagent web UI](docs/ui-answer.png)
+
 A small chat front-end (FastAPI backend + a static Tailwind page) shows the
 answer, the intent badge, citation chips, and a collapsible retrieval trace:
 

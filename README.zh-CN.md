@@ -69,6 +69,8 @@ python -m docagent.web        # 打开 http://127.0.0.1:8000
 
 ## Web UI
 
+![docagent web UI](docs/ui-answer.png)
+
 小型聊天前端(FastAPI 后端 + 静态 Tailwind 页面),展示答案、意图徽章、引用 chips、可折叠的检索 trace:
 
 ```bash
