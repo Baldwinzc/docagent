@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from docagent.agent import get_default_agent
 from docagent.configuration import DEFAULT_LLM_MODEL
 from docagent.eval.prompts import RESPONSE_CRITERIA_SYSTEM_PROMPT
-from docagent.eval.qa_dataset import QA_CASES, qa_names
+from docagent.eval.qa_dataset import load_qa_cases
 from docagent.utils import extract_outcome, extract_tool_calls, format_messages_string
 
 load_dotenv(override=True)
@@ -32,9 +32,11 @@ _judge = init_chat_model(DEFAULT_LLM_MODEL).with_structured_output(CriteriaGrade
 
 
 def _in_scope_cases():
+    # Anchored to the bundled sample_notes so this LLM suite can run without
+    # downloading the papers (ingest sample_notes into the default collection).
     return [
-        (c["question"], n, c["criteria"])
-        for c, n in zip(QA_CASES, qa_names)
+        (c["question"], c["id"], c["criteria"])
+        for c in load_qa_cases(split="offline_sample")
         if c["intent"] == "in_scope"
     ]
 

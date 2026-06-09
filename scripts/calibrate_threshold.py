@@ -7,16 +7,24 @@ Sweep candidate thresholds and report precision / recall / abstention, so
 ``SCORE_THRESHOLD`` is chosen from data instead of by feel.
 
     python scripts/calibrate_threshold.py
+    python scripts/calibrate_threshold.py --split offline_sample
 """
 
-from docagent.eval.qa_dataset import QA_CASES
+import argparse
+
+from docagent.eval.qa_dataset import load_qa_cases
 from docagent.retriever import get_retriever
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Calibrate SCORE_THRESHOLD on QA cases.")
+    parser.add_argument("--split", default="full_corpus",
+                        choices=["full_corpus", "offline_sample"])
+    args = parser.parse_args()
+
     r = get_retriever()
     scored = []
-    for c in QA_CASES:
+    for c in load_qa_cases(split=args.split):
         hits = r.search(c["question"], k=1, score_threshold=float("-inf"))
         top = hits[0].score if hits else float("-inf")
         scored.append((c["question"][:46], top, c["intent"] == "in_scope"))

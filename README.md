@@ -121,13 +121,32 @@ import time; tools are bound to the configured retriever (`make_retrieval_tools`
 
 ## Evaluation
 
-Labelled QA over the demo papers (`src/docagent/eval/qa_dataset.py`): single-paper,
-multi-hop, out-of-scope, and unanswerable questions.
+The eval set is a curated, **category-labelled** QA dataset in
+`src/docagent/eval/data/qa_cases.jsonl` (one JSON row per case). Each row carries
+an `intent`, a `category` (`single_paper` / `multi_hop` / `numeric` /
+`definitional` / `out_of_scope` / `no_answer`), gold `expected_sources`, an
+LLM-judged `criteria`, and a `split`:
+
+- `offline_sample` — answerable from the bundled `sample_notes/`; runs with no
+  paper download (used by the offline LLM test suite).
+- `full_corpus` — needs the downloaded `papers/`; the manual / nightly eval.
+
+**Grow the set (generate → curate → eval):**
 
 ```bash
 python scripts/fetch_arxiv.py --demo && python -m docagent.ingest --path ./papers --reset
-python -m docagent.eval.run_eval
+python scripts/generate_qa.py --n-per-category 25   # LLM-drafts candidates from real chunks
+#   -> review src/docagent/eval/data/generated_raw.jsonl, set curated=true,
+#      and merge good rows into qa_cases.jsonl
+python -m docagent.eval.run_eval                    # full_corpus, per-category table
+python -m docagent.eval.run_eval --split offline_sample --categories multi_hop
 ```
+
+`run_eval` reports every metric **overall and broken down by category** (the
+per-category view is what lets a change prove it actually helps, e.g. multi-hop),
+and writes a machine-readable `eval_results.json` baseline for tracking deltas.
+
+Demo-set baseline (the 3 demo papers, 220 chunks, the seed cases):
 
 | Metric | Result |
 |---|---|
@@ -138,9 +157,8 @@ python -m docagent.eval.run_eval
 | Hallucinated citations | **0** |
 | Refusal accuracy | **2/2 (100%)** |
 
-> Over the 3 demo papers (220 chunks). The hardest case is multi-hop — recall 0.50
-> on the one question that needs two papers at once, though its answer/citation
-> still came out correct.
+> The hardest case is multi-hop — recall 0.50 on the one question that needs two
+> papers at once, though its answer/citation still came out correct.
 
 ## Limitations
 
@@ -151,8 +169,10 @@ Portfolio-grade local RAG, not a production system. Known limits:
 - **Citation verification is source/page-level** — checked against retrieved
   locators, not yet per-sentence entailment of the cited span.
 - **Multi-hop** — questions needing several papers at once are the hardest case.
-- **Eval set is small** (8 cases over 3 papers) — it exercises the pipeline, it
-  doesn't prove broad generalisation.
+- **Eval breadth** — the eval set is now a curated, category-labelled JSONL with a
+  generator (`scripts/generate_qa.py`), but broad generalisation still depends on
+  running generation + human curation over a larger corpus; the committed seed is
+  intentionally small.
 
 ## Project layout
 
@@ -164,8 +184,8 @@ src/docagent/
 ├── ask.py / web.py     # CLI / FastAPI + static web UI
 ├── tools/              # make_retrieval_tools(retriever, cfg); Answer, Question
 ├── utils.py            # extract_outcome(): citation verification
-└── eval/               # qa_dataset.py + run_eval.py
-scripts/                # fetch_arxiv.py · check_retrieval.py · calibrate_threshold.py
+└── eval/               # data/qa_cases.jsonl (dataset) + qa_dataset.py (loader) + run_eval.py
+scripts/                # fetch_arxiv.py · generate_qa.py · check_retrieval.py · calibrate_threshold.py
 sample_notes/           # bundled offline corpus (CI / quick try; no download)
 tests/                  # test_unit.py (offline) + test_retrieval.py + test_response.py
 ```

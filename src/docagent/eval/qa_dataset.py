@@ -1,76 +1,104 @@
-"""QA evaluation dataset over the demo arXiv papers.
+"""QA evaluation dataset over the demo arXiv papers (and bundled sample notes).
 
-Reproducible: download the same papers first, then run the eval:
+The cases live in ``data/qa_cases.jsonl`` (one JSON object per line) so the set
+can grow to hundreds of human-curated rows without bloating this module and so it
+diffs cleanly in review. This module is just the **loader + derived views**; all
+existing imports (``QA_CASES``, ``qa_names``, …) keep working.
+
+Each row has:
+    id              - unique, stable case id (also used as the case name)
+    question        - the user question
+    intent          - "in_scope" | "out_of_scope" | "no_answer"
+    category        - "single_paper" | "multi_hop" | "out_of_scope"
+                      | "no_answer" | "numeric" | "definitional"
+    expected_sources- source basenames the answer should rest on ([] if none)
+    criteria        - what a correct answer / refusal must satisfy (LLM-judged)
+    source_chunk_ids- provenance of where a generated case was drawn from ([] if hand-written)
+    curated         - True once a human has reviewed the row
+    split           - "offline_sample" (answerable from bundled sample_notes/, used by CI)
+                      | "full_corpus"  (needs the downloaded papers/, manual/nightly eval)
+
+Reproducible full run (after downloading the papers):
     python scripts/fetch_arxiv.py --demo
     python -m docagent.ingest --path ./papers --reset
     python -m docagent.eval.run_eval
 
-The set covers single-paper facts, a multi-hop question spanning two papers, an
-out-of-scope question (router should decline), and an in-domain-sounding but
-unanswerable question (the papers don't cover it, so the agent must say so).
+Required keys + the allowed enum values are validated on load so a malformed row
+fails fast instead of silently skewing the metrics.
 """
 
-QA_CASES = [
-    {
-        "question": "What problem with recurrent models does the Transformer's attention mechanism address?",
-        "intent": "in_scope",
-        "expected_sources": ["attention-is-all-you-need.pdf"],
-        "criteria": "The Transformer replaces recurrence with attention, enabling parallelization and better long-range dependencies.",
-    },
-    {
-        "question": "What is scaled dot-product attention and why is the 1/sqrt(d_k) scaling used?",
-        "intent": "in_scope",
-        "expected_sources": ["attention-is-all-you-need.pdf"],
-        "criteria": "Attention = softmax(QKᵀ/sqrt(d_k))V; the scaling keeps dot products from getting large and pushing softmax into small-gradient regions.",
-    },
-    {
-        "question": "How does retrieval-augmented generation combine a retriever with a generator?",
-        "intent": "in_scope",
-        "expected_sources": ["retrieval-augmented-generation.pdf"],
-        "criteria": "A retriever fetches relevant passages from an external index; the generator conditions on them (marginalizing over retrieved documents).",
-    },
-    {
-        "question": "What pre-training objectives does BERT use?",
-        "intent": "in_scope",
-        "expected_sources": ["bert.pdf"],
-        "criteria": "Masked language modeling (masked tokens) and next-sentence prediction.",
-    },
-    {
-        "question": "Does RAG rely on the model's parametric memory or on a non-parametric memory?",
-        "intent": "in_scope",
-        "expected_sources": ["retrieval-augmented-generation.pdf"],
-        "criteria": "A non-parametric memory — an external retrievable index — combined with the parametric model.",
-    },
-    {
-        "question": "How is BERT related to the Transformer architecture?",
-        "intent": "in_scope",
-        "expected_sources": ["bert.pdf", "attention-is-all-you-need.pdf"],
-        "criteria": "BERT is a multi-layer bidirectional Transformer encoder, built on the Transformer architecture.",
-    },
-    {
-        "question": "What is the capital of France?",
-        "intent": "out_of_scope",
-        "expected_sources": [],
-        "criteria": "Declines / states the question is outside the scope of the papers; does not answer 'Paris'.",
-    },
-    {
-        "question": "How do I deploy a FastAPI application to production with Docker?",
-        "intent": "no_answer",
-        "expected_sources": [],
-        "criteria": "Honestly states the papers do not cover this; does NOT fabricate deployment instructions.",
-    },
-]
+import json
+from pathlib import Path
+from typing import Any
 
-# --- Derived views (used by tests/test_response.py) ---
+DATA_PATH = Path(__file__).parent / "data" / "qa_cases.jsonl"
+
+INTENTS = {"in_scope", "out_of_scope", "no_answer"}
+CATEGORIES = {
+    "single_paper",
+    "multi_hop",
+    "out_of_scope",
+    "no_answer",
+    "numeric",
+    "definitional",
+}
+SPLITS = {"offline_sample", "full_corpus"}
+_REQUIRED_KEYS = {
+    "id",
+    "question",
+    "intent",
+    "category",
+    "expected_sources",
+    "criteria",
+    "split",
+}
+
+
+def _validate(case: dict, lineno: int) -> dict:
+    missing = _REQUIRED_KEYS - case.keys()
+    if missing:
+        raise ValueError(f"qa_cases.jsonl line {lineno}: missing keys {sorted(missing)}")
+    if case["intent"] not in INTENTS:
+        raise ValueError(f"qa_cases.jsonl line {lineno}: bad intent {case['intent']!r}")
+    if case["category"] not in CATEGORIES:
+        raise ValueError(f"qa_cases.jsonl line {lineno}: bad category {case['category']!r}")
+    if case["split"] not in SPLITS:
+        raise ValueError(f"qa_cases.jsonl line {lineno}: bad split {case['split']!r}")
+    # Tolerate older / generated rows that omit optional fields.
+    case.setdefault("source_chunk_ids", [])
+    case.setdefault("curated", False)
+    return case
+
+
+def load_qa_cases(
+    split: str | None = None, path: str | Path = DATA_PATH
+) -> list[dict[str, Any]]:
+    """Load (and validate) the QA cases, optionally filtered to one ``split``."""
+    cases: list[dict] = []
+    seen_ids: set[str] = set()
+    with open(path, encoding="utf-8") as f:
+        for lineno, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            case = _validate(json.loads(line), lineno)
+            if case["id"] in seen_ids:
+                raise ValueError(f"qa_cases.jsonl line {lineno}: duplicate id {case['id']!r}")
+            seen_ids.add(case["id"])
+            if split is None or case["split"] == split:
+                cases.append(case)
+    return cases
+
+
+# --- Back-compat module global: the full set, in file order ---
+QA_CASES = load_qa_cases()
+
+# --- Derived views (all positionally aligned with QA_CASES; used by run_eval /
+#     tests/test_response.py — keep them in lockstep) ---
 qa_inputs = [{"question": c["question"]} for c in QA_CASES]
-qa_names = [
-    "transformer_vs_rnn", "scaled_attention", "rag_retriever_generator",
-    "bert_pretraining", "rag_nonparametric", "bert_is_transformer",
-    "out_of_scope_geo", "no_answer_deploy",
-]
+qa_names = [c["id"] for c in QA_CASES]
 intent_outputs = [c["intent"] for c in QA_CASES]
 response_criteria_list = [c["criteria"] for c in QA_CASES]
 expected_tool_calls = [
-    ["search_docs", "Answer"] if c["intent"] == "in_scope" else []
-    for c in QA_CASES
+    ["search_docs", "Answer"] if c["intent"] == "in_scope" else [] for c in QA_CASES
 ]

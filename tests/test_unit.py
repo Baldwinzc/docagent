@@ -7,6 +7,13 @@ or embedding model.
 
 from langchain_core.documents import Document
 
+from docagent.eval.qa_dataset import (
+    CATEGORIES,
+    INTENTS,
+    SPLITS,
+    load_qa_cases,
+    qa_names,
+)
 from docagent.ingest import chunk_documents
 from docagent.retriever import HybridRetriever
 from docagent.utils import extract_outcome, source_of
@@ -75,3 +82,33 @@ def test_question_extraction():
     o = extract_outcome(result)
     assert o["kind"] == "question"
     assert o["question"] == "Which version?"
+
+
+def test_qa_dataset_loads_and_validates():
+    cases = load_qa_cases()
+    assert len(cases) >= 8, "expected at least the migrated seed cases"
+    # required keys + valid enum values on every row (load already validates)
+    for c in cases:
+        assert c["intent"] in INTENTS
+        assert c["category"] in CATEGORIES
+        assert c["split"] in SPLITS
+        assert isinstance(c["expected_sources"], list)
+        # in_scope cases must name at least one expected source; refusals must not
+        if c["intent"] == "in_scope":
+            assert c["expected_sources"], f"{c['id']} in_scope but no expected_sources"
+        else:
+            assert not c["expected_sources"], f"{c['id']} refusal but has expected_sources"
+
+
+def test_qa_dataset_ids_unique_and_views_aligned():
+    assert len(qa_names) == len(set(qa_names)), "case ids must be unique"
+    # the offline_sample split must be non-empty (it anchors the offline LLM suite)
+    assert load_qa_cases(split="offline_sample"), "offline_sample split is empty"
+
+
+def test_qa_dataset_split_filter():
+    full = load_qa_cases(split="full_corpus")
+    offline = load_qa_cases(split="offline_sample")
+    assert all(c["split"] == "full_corpus" for c in full)
+    assert all(c["split"] == "offline_sample" for c in offline)
+    assert len(full) + len(offline) == len(load_qa_cases())

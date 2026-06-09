@@ -104,12 +104,24 @@ agent 由 `build_agent(config)` 构建 —— import 时不初始化任何模型
 
 ## 评估
 
-针对 demo 论文的带标注 QA(`src/docagent/eval/qa_dataset.py`):单论文、多跳、超范围、无答案四类。
+评估集是一个**带类别标注**的 QA 数据集 `src/docagent/eval/data/qa_cases.jsonl`(每行一个 JSON)。每行带 `intent`、`category`(`single_paper` / `multi_hop` / `numeric` / `definitional` / `out_of_scope` / `no_answer`)、黄金 `expected_sources`、LLM 评判用的 `criteria`,以及 `split`:
+
+- `offline_sample` —— 答案落在内置 `sample_notes/`,无需下载论文即可跑(离线 LLM 测试用)。
+- `full_corpus` —— 需下载 `papers/`,手动 / nightly 评估。
+
+**扩充评测集(生成 → 精校 → 评估):**
 
 ```bash
 python scripts/fetch_arxiv.py --demo && python -m docagent.ingest --path ./papers --reset
-python -m docagent.eval.run_eval
+python scripts/generate_qa.py --n-per-category 25   # 用真实 chunk 让 LLM 起草候选题
+#   -> 审阅 src/docagent/eval/data/generated_raw.jsonl，把好题 curated=true 后并入 qa_cases.jsonl
+python -m docagent.eval.run_eval                    # full_corpus，输出按类别分组的表
+python -m docagent.eval.run_eval --split offline_sample --categories multi_hop
 ```
+
+`run_eval` **同时输出总体与按类别分组**的所有指标(按类别这一视图,才能证明某次改动是否真有帮助,比如多跳),并写出机器可读的 `eval_results.json` 基线,便于追踪里程碑间的差异。
+
+Demo 小集基线(3 篇 demo 论文,220 chunks,种子用例):
 
 | 指标 | 结果 |
 |---|---|
@@ -120,7 +132,7 @@ python -m docagent.eval.run_eval
 | 幻觉引用 | **0** |
 | 拒答准确率 | **2/2 (100%)** |
 
-> 基于 3 篇 demo 论文(220 chunks)。最难的是多跳 —— 需同时用两篇论文的那道题召回 0.50,但答案/引用仍正确。
+> 最难的是多跳 —— 需同时用两篇论文的那道题召回 0.50,但答案/引用仍正确。
 
 ## 局限
 
@@ -129,7 +141,7 @@ python -m docagent.eval.run_eval
 - **语料规模** —— 检索器启动时把全部 chunk 载入内存并构建 BM25;个人论文库(≤ 约 1 万 chunks)够用,10⁵–10⁶ 不行。
 - **引用校验是来源/页级** —— 对照检索 locator 校验,尚未逐句验证答案被引用片段蕴含。
 - **多跳** —— 需同时用多篇论文的问题最难。
-- **评估集小**(3 篇论文 8 例)—— 检验管线用,不证明广泛泛化。
+- **评估广度** —— 评估集现在是带类别标注的 JSONL,并配有生成器(`scripts/generate_qa.py`);但广泛泛化仍取决于在更大语料上跑生成 + 人工精校,提交的种子集刻意保持小。
 
 ## 目录结构
 
@@ -141,8 +153,8 @@ src/docagent/
 ├── ask.py / web.py     # CLI / FastAPI + 静态 Web UI
 ├── tools/              # make_retrieval_tools(retriever, cfg); Answer, Question
 ├── utils.py            # extract_outcome()：引用校验
-└── eval/               # qa_dataset.py + run_eval.py
-scripts/                # fetch_arxiv.py · check_retrieval.py · calibrate_threshold.py
+└── eval/               # data/qa_cases.jsonl(数据集) + qa_dataset.py(加载器) + run_eval.py
+scripts/                # fetch_arxiv.py · generate_qa.py · check_retrieval.py · calibrate_threshold.py
 sample_notes/           # 内置离线语料（CI / 快速试，无需下载）
 tests/                  # test_unit.py（离线）+ test_retrieval.py + test_response.py
 ```
