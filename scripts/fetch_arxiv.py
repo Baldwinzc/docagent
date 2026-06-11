@@ -17,10 +17,16 @@ from pathlib import Path
 PAPERS = Path(__file__).resolve().parent.parent / "papers"
 
 # A small, recognizable starter set (downloaded locally, not redistributed).
+# These cover the full_corpus eval cases in src/docagent/eval/data/qa_cases.jsonl.
 DEMO = {
     "1706.03762": "attention-is-all-you-need",
     "2005.11401": "retrieval-augmented-generation",
     "1810.04805": "bert",
+    "1910.10683": "t5",
+    "1907.11692": "roberta",
+    "2004.04906": "dense-passage-retrieval",
+    "1908.10084": "sentence-bert",
+    "2005.14165": "gpt-3",
 }
 
 

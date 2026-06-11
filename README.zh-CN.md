@@ -28,7 +28,7 @@ cp .env.example .env
 #   pip install -e ".[ollama]"  且在 .env 设 LLM_MODEL=ollama:llama3.1
 
 # 3. 拉论文（本地下载，绝不上传）并建索引
-python scripts/fetch_arxiv.py --demo          # Attention、RAG、BERT
+python scripts/fetch_arxiv.py --demo          # 8 篇：Attention、RAG、BERT、T5、RoBERTa、DPR、SBERT、GPT-3
 #   或：python scripts/fetch_arxiv.py 1706.03762 2005.11401  （任意 arXiv id）
 python -m docagent.ingest --path ./papers --reset
 
@@ -121,7 +121,7 @@ python -m docagent.eval.run_eval --split offline_sample --categories multi_hop
 
 `run_eval` **同时输出总体与按类别分组**的所有指标(按类别这一视图,才能证明某次改动是否真有帮助,比如多跳),并写出机器可读的 `eval_results.json` 基线,便于追踪里程碑间的差异。
 
-Demo 小集基线(3 篇 demo 论文,220 chunks,种子用例):
+当前评测集含**约 90 条**用例,覆盖 6 个类别,跨 5 篇内置笔记(`offline_sample`)与 8 篇 demo 论文(`full_corpus`)。下表是**早期 3 篇论文 / 8 例的基线**数字 —— 跑 `run_eval` 可得当前集的按类别表:
 
 | 指标 | 结果 |
 |---|---|

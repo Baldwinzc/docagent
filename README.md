@@ -39,7 +39,7 @@ cp .env.example .env
 #   pip install -e ".[ollama]"  &&  set LLM_MODEL=ollama:llama3.1 in .env
 
 # 3. Get some papers (downloaded locally, never uploaded) and index them
-python scripts/fetch_arxiv.py --demo          # Attention, RAG, BERT
+python scripts/fetch_arxiv.py --demo          # 8 papers: Attention, RAG, BERT, T5, RoBERTa, DPR, SBERT, GPT-3
 #   or: python scripts/fetch_arxiv.py 1706.03762 2005.11401  (any arXiv ids)
 python -m docagent.ingest --path ./papers --reset
 
@@ -146,7 +146,10 @@ python -m docagent.eval.run_eval --split offline_sample --categories multi_hop
 per-category view is what lets a change prove it actually helps, e.g. multi-hop),
 and writes a machine-readable `eval_results.json` baseline for tracking deltas.
 
-Demo-set baseline (the 3 demo papers, 220 chunks, the seed cases):
+The curated set currently holds **~90 cases** across 6 categories, over 5 bundled
+sample notes (`offline_sample`) and 8 demo papers (`full_corpus`). The numbers
+below are the **historical 3-paper / 8-case baseline** — re-run `run_eval` to get
+the per-category table for the current set:
 
 | Metric | Result |
 |---|---|
