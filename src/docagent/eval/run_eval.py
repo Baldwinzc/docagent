@@ -138,9 +138,7 @@ def main():
             for b in buckets:
                 b["recalls"].append(recall)
 
-        result = agent.invoke(
-            {"question_input": {"question": q}}, config={"recursion_limit": 12}
-        )
+        result = agent.invoke({"question_input": {"question": q}})
         o = extract_outcome(result)
         intent, answer = o["intent"], o["answer"]
         cited = {source_of(c).rsplit("/", 1)[-1] for c in o["citations"]}

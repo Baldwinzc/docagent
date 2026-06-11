@@ -29,16 +29,23 @@ from docagent.tools import Answer
 from docagent.utils import extract_outcome
 from docagent.verify import verify_claims
 
-# Each Researcher runs an independent retrieval loop; cap its steps like the CLI.
-RESEARCH_RECURSION_LIMIT = 12
 MAX_SUB_QUESTIONS = 4
 
 
-def build_orchestrator(llm, research_loop, *, verify_backend: str = "llm"):
+def build_orchestrator(
+    llm,
+    research_loop,
+    *,
+    verify_backend: str = "off",
+    research_recursion_limit: int = 12,
+):
     """Compile the planner→researchers→verifier→synthesizer subgraph.
 
     ``research_loop`` is the compiled retrieval-loop graph (shared with the simple
-    path). ``verify_backend`` is passed to ``verify_claims`` for the Verifier.
+    path). ``verify_backend`` is passed to ``verify_claims`` for the Verifier
+    (default "off" so the complex path doesn't pay N grading calls unless asked;
+    set to "nli" for offline entailment or "llm" for a grading call per finding).
+    ``research_recursion_limit`` caps each Researcher's retrieval loop.
     """
     planner_llm = llm.with_structured_output(PlanSchema)
     # Only the Answer tool is bound + forced, so the synthesizer always finishes
@@ -76,7 +83,7 @@ def build_orchestrator(llm, research_loop, *, verify_backend: str = "llm"):
                 {"role": "user",
                  "content": f"Answer this question using the knowledge base: {sq}"}
             ]},
-            config={"recursion_limit": RESEARCH_RECURSION_LIMIT},
+            config={"recursion_limit": research_recursion_limit},
         )
         o = extract_outcome({**result, "classification_decision": "in_scope"})
         evidence = result.get("evidence", []) or []

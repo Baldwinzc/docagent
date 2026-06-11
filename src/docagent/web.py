@@ -45,10 +45,7 @@ class AskResponse(BaseModel):
 
 @app.post("/api/ask", response_model=AskResponse)
 def ask(req: AskRequest) -> AskResponse:
-    result = get_default_agent().invoke(
-        {"question_input": {"question": req.question}},
-        config={"recursion_limit": 12},
-    )
+    result = get_default_agent().invoke({"question_input": {"question": req.question}})
     o = extract_outcome(result)
     return AskResponse(
         kind=o["kind"],

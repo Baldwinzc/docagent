@@ -42,6 +42,17 @@ DEFAULT_RRF_K = int(os.environ.get("RRF_K", "60"))
 # --- LLM (only the answer step may need a key) ---
 DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL", "openai:gpt-4.1")
 
+# --- Graph execution budgets ---
+# ReAct loop steps for the retrieval loop: the simple path's response_agent AND
+# each researcher inside the orchestrator. The orchestrator's own
+# planner -> fan-out -> verify -> synth subgraph gets a separate, larger budget.
+# The top-level graph (router -> one node) is tiny and uses LangGraph's default,
+# so callers no longer pass recursion_limit by hand.
+DEFAULT_RECURSION_LIMIT = int(os.environ.get("RECURSION_LIMIT", "12"))
+DEFAULT_ORCHESTRATOR_RECURSION_LIMIT = int(
+    os.environ.get("ORCHESTRATOR_RECURSION_LIMIT", "24")
+)
+
 # --- Claim verification (per-sentence citation entailment) ---
 # Backend that checks each answer sentence is actually entailed by the retrieved
 # evidence: "off" (default, no-op), "nli" (a local cross-encoder — offline, no
@@ -63,6 +74,8 @@ class Configuration:
     top_k: int = DEFAULT_TOP_K
     candidate_k: int = DEFAULT_CANDIDATE_K
     score_threshold: float = DEFAULT_SCORE_THRESHOLD
+    recursion_limit: int = DEFAULT_RECURSION_LIMIT
+    orchestrator_recursion_limit: int = DEFAULT_ORCHESTRATOR_RECURSION_LIMIT
     entailment_backend: str = DEFAULT_ENTAILMENT_BACKEND
     nli_model: str = DEFAULT_NLI_MODEL
 

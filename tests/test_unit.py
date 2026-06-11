@@ -274,3 +274,26 @@ def test_research_loop_graph_compiles():
 def test_orchestrator_graph_wiring():
     g = build_orchestrator(_FakeLLM(), object()).get_graph()
     assert {"planner", "researcher", "verifier", "synthesizer"} <= set(g.nodes)
+
+
+def test_merge_subgraph_result_slices_new_messages():
+    from docagent.agent import _merge_subgraph_result
+
+    out = {
+        "messages": ["u", "a1", "a2"],
+        "trace": [{"step": "x"}],
+        "retrieved_locators": ["l"],
+        "evidence": [{"locator": "l", "text": "t"}],
+    }
+    upd = _merge_subgraph_result(out, prior_msg_count=1)
+    assert upd["messages"] == ["a1", "a2"]  # the 1 prior (input) message is dropped
+    assert upd["trace"] == [{"step": "x"}]
+    assert upd["retrieved_locators"] == ["l"]
+
+
+def test_merge_subgraph_result_omits_absent_keys():
+    from docagent.agent import _merge_subgraph_result
+
+    upd = _merge_subgraph_result({"messages": ["only"]}, 0)
+    assert upd["messages"] == ["only"]
+    assert "trace" not in upd and "evidence" not in upd

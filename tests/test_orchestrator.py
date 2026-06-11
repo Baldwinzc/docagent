@@ -36,9 +36,7 @@ def agent():
 
 @pytest.mark.parametrize("question,name", _multi_hop_cases())
 def test_multi_hop_orchestration(agent, question, name):
-    result = agent.invoke(
-        {"question_input": {"question": question}}, config={"recursion_limit": 30}
-    )
+    result = agent.invoke({"question_input": {"question": question}})
 
     # 1. router sent it down the complex path and the planner decomposed it
     planner_steps = [t for t in result.get("trace", []) if t.get("step") == "planner"]

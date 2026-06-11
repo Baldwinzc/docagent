@@ -130,6 +130,20 @@ def build_research_loop(llm_with_tools, tools_by_name, system_prompt):
     return builder.compile()
 
 
+def _merge_subgraph_result(out: dict, prior_msg_count: int) -> dict:
+    """Merge a subgraph's final state back into the parent.
+
+    Returns only the messages the subgraph *added* (so the user message the
+    router already placed in parent state isn't re-appended), plus the retrieval
+    side-channels the subgraph accumulated.
+    """
+    update = {
+        k: out[k] for k in ("trace", "retrieved_locators", "evidence") if k in out
+    }
+    update["messages"] = (out.get("messages", []) or [])[prior_msg_count:]
+    return update
+
+
 def build_agent(config: Configuration | None = None):
     """Build and compile the agent graph for a given configuration.
 
@@ -150,7 +164,28 @@ def build_agent(config: Configuration | None = None):
     )
 
     research_loop = build_research_loop(llm_with_tools, tools_by_name, system_prompt)
-    orchestrator = build_orchestrator(llm, research_loop)
+    orchestrator = build_orchestrator(
+        llm,
+        research_loop,
+        verify_backend=config.entailment_backend,
+        research_recursion_limit=config.recursion_limit,
+    )
+
+    # Each path invokes its inner graph with its OWN recursion budget (instead of
+    # adding the compiled graph as a node, which would force both to inherit the
+    # top-level limit). The top-level graph is then just router -> one node.
+    def response_agent(state: State):
+        msgs = state["messages"]
+        out = research_loop.invoke(
+            {"messages": msgs}, config={"recursion_limit": config.recursion_limit}
+        )
+        return _merge_subgraph_result(out, len(msgs))
+
+    def orchestrator_node(state: State):
+        out = orchestrator.invoke(
+            state, config={"recursion_limit": config.orchestrator_recursion_limit}
+        )
+        return _merge_subgraph_result(out, len(state.get("messages", []) or []))
 
     def intent_router(
         state: State,
@@ -225,8 +260,8 @@ def build_agent(config: Configuration | None = None):
     overall_workflow = (
         StateGraph(State, input_schema=StateInput)
         .add_node("intent_router", intent_router)
-        .add_node("response_agent", research_loop)
-        .add_node("orchestrator", orchestrator)
+        .add_node("response_agent", response_agent)
+        .add_node("orchestrator", orchestrator_node)
         .add_edge(START, "intent_router")
     )
     return overall_workflow.compile()

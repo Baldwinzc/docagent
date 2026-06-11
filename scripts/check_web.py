@@ -20,8 +20,7 @@ def main():
 
     # direct invoke so we can inspect grounding (retrieved locators vs citations)
     result = get_default_agent().invoke(
-        {"question_input": {"question": "How do I declare an integer path parameter?"}},
-        config={"recursion_limit": 12},
+        {"question_input": {"question": "How do I declare an integer path parameter?"}}
     )
     o = extract_outcome(result)
     print("retrieved   :", result.get("retrieved_locators"))

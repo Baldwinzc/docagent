@@ -70,8 +70,7 @@ def main():
     args = parser.parse_args()
 
     result = get_default_agent().invoke(
-        {"question_input": {"question": args.question}},
-        config={"recursion_limit": 12},
+        {"question_input": {"question": args.question}}
     )
 
     verify_llm = None

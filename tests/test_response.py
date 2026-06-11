@@ -48,9 +48,7 @@ def agent():
 
 @pytest.mark.parametrize("question,name,criteria", _in_scope_cases())
 def test_in_scope_case(agent, question, name, criteria):
-    result = agent.invoke(
-        {"question_input": {"question": question}}, config={"recursion_limit": 12}
-    )
+    result = agent.invoke({"question_input": {"question": question}})
 
     # 1. expected tool calls
     tools = extract_tool_calls(result["messages"])
