@@ -75,8 +75,22 @@ Transformer [bert.pdf (p.1); bert.pdf (p.3)].
 
 小型聊天前端(FastAPI + 静态 Tailwind),展示答案、意图徽章、引用 chips、被丢弃的未支撑引用、可折叠检索 trace。`python -m docagent.web` → http://127.0.0.1:8000。
 
-API:`POST /api/ask {question, session_id?}` → `{kind, intent, answer, question, citations, unsupported, trace}`。
-传入稳定的 `session_id` 即可保持多轮对话(追问通过按线程的 checkpointer 关联前几轮);不传则为单轮无状态回答。
+API:
+- `POST /api/ask {question, session_id?, collection?}` → `{kind, intent, answer, question, citations, unsupported, trace}`
+- `POST /api/ask/stream` —— 同样的请求体,SSE 流式:每个图节点一个 `step` 事件,最后一个 `final` 事件
+- `GET /api/sources {collection?}` → `{sources}`;`GET /health` → `{status}`
+
+传 `session_id` 保持多轮对话(按线程 checkpointer),传 `collection` 让一个服务承载多个知识库。
+设 `DOCAGENT_API_KEY` 后 `/api/*` 需带 `X-API-Key`;`RATE_LIMIT_REQUESTS`/`RATE_LIMIT_WINDOW` 控制按客户端限流。
+
+### Docker
+
+```bash
+docker build -t docagent .
+docker run --rm -v $PWD/papers:/papers -v $PWD/chroma_db:/data/chroma docagent \
+  python -m docagent.ingest --path /papers --reset
+docker run -p 8000:8000 -v $PWD/chroma_db:/data/chroma -e OPENAI_API_KEY=sk-... docagent
+```
 
 ## 架构
 

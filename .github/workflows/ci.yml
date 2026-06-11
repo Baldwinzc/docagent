@@ -27,8 +27,8 @@ jobs:
       - name: Type check (mypy)
         run: mypy
 
-      - name: Unit tests (offline — no network, no model downloads, no API key)
-        run: python -m pytest tests/test_unit.py -v
+      - name: Unit + web tests (offline — no network, no model downloads, no API key)
+        run: python -m pytest tests/test_unit.py tests/test_web.py -v
 
       - name: Retrieval integration tests (downloads embedding + reranker)
         run: python -m pytest tests/test_retrieval.py -v

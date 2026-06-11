@@ -21,6 +21,8 @@ pip install -e .
   `response_agent` (simple) vs `orchestrator` (complex) by question complexity.
 - Multi-agent: `src/docagent/orchestrator.py` (planner→researchers→verifier→synthesizer),
   `src/docagent/verify.py` (per-sentence citation entailment).
+- Web API: `src/docagent/web.py` (FastAPI: /api/ask, /api/ask/stream SSE, /health;
+  optional API-key auth + rate limit via `src/docagent/security.py`); `Dockerfile`.
 - Tools: `src/docagent/tools/retrieval_tools.py`
 - Ingest / ask / chat CLIs: `src/docagent/ingest.py`, `src/docagent/ask.py`,
   `src/docagent/chat.py` (multi-turn; `get_chat_agent()` + thread_id)

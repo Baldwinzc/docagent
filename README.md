@@ -91,9 +91,25 @@ A small chat front-end (FastAPI + a static Tailwind page) showing the answer, th
 intent badge, citation chips, dropped (unsupported) citations, and a collapsible
 retrieval trace. `python -m docagent.web` → http://127.0.0.1:8000.
 
-API: `POST /api/ask {question, session_id?}` → `{kind, intent, answer, question, citations, unsupported, trace}`.
-Pass a stable `session_id` to hold a multi-turn conversation (follow-ups resolve
-against earlier turns via a per-thread checkpointer); omit it for a one-shot answer.
+API:
+- `POST /api/ask {question, session_id?, collection?}` → `{kind, intent, answer, question, citations, unsupported, trace}`
+- `POST /api/ask/stream` — same body, Server-Sent Events: a `step` event per graph node, then a `final` event
+- `GET /api/sources {collection?}` → `{sources}`; `GET /health` → `{status}`
+
+Pass a stable `session_id` to hold a multi-turn conversation (per-thread
+checkpointer), and `collection` to serve several knowledge bases from one server.
+Set `DOCAGENT_API_KEY` to require `X-API-Key` on `/api/*`, and
+`RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW` for a per-client rate limit.
+
+### Docker
+
+```bash
+docker build -t docagent .
+# ingest into a mounted volume, then serve it:
+docker run --rm -v $PWD/papers:/papers -v $PWD/chroma_db:/data/chroma docagent \
+  python -m docagent.ingest --path /papers --reset
+docker run -p 8000:8000 -v $PWD/chroma_db:/data/chroma -e OPENAI_API_KEY=sk-... docagent
+```
 
 ## Architecture
 

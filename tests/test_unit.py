@@ -325,3 +325,27 @@ def test_recent_dialogue_caps_and_handles_message_objects():
 
     assert len(_recent_dialogue([{"role": "user", "content": f"q{i}"} for i in range(6)], 3)) == 3
     assert _recent_dialogue([HumanMessage("hello")]) == [{"role": "user", "content": "hello"}]
+
+
+# --- M3d: API hardening primitives (framework-free, offline) ---
+
+def test_rate_limiter_fixed_window():
+    from docagent.security import RateLimiter
+
+    rl = RateLimiter(max_requests=2, window_seconds=10)
+    assert rl.allow("ip", 0.0)
+    assert rl.allow("ip", 1.0)
+    assert not rl.allow("ip", 2.0)   # 3rd request within the window -> blocked
+    assert rl.allow("ip", 12.0)      # window elapsed -> allowed again
+    assert rl.allow("other-ip", 2.0)  # keys are independent
+
+
+def test_api_key_ok(monkeypatch):
+    from docagent.security import api_key_ok
+
+    monkeypatch.delenv("DOCAGENT_API_KEY", raising=False)
+    assert api_key_ok(None) is True   # auth disabled when no key configured
+    monkeypatch.setenv("DOCAGENT_API_KEY", "secret")
+    assert api_key_ok("secret") is True
+    assert api_key_ok("wrong") is False
+    assert api_key_ok(None) is False

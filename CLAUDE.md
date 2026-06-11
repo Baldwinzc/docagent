@@ -44,6 +44,9 @@ locally and need no key.
   both ingest and the retrieval tools so they stay in sync.
 - `src/docagent/tools/retrieval_tools.py` — `search_docs`, `list_sources`,
   `Answer` (terminal tool that forces citations), `Question`.
+- `src/docagent/web.py` — FastAPI app (`/api/ask`, SSE `/api/ask/stream`, `/health`,
+  multi-collection, per-thread sessions); `src/docagent/security.py` — framework-free
+  API-key check + rate limiter wired in as dependencies. `Dockerfile` serves it.
 
 ## Running
 
