@@ -166,11 +166,13 @@ python -m docagent.eval.run_eval --split offline_sample --categories multi_hop
 per-category view is what lets a change prove it actually helps, e.g. multi-hop),
 and writes a machine-readable `eval_results.json` baseline for tracking deltas.
 
-The curated set holds **132 cases** across 6 categories, over **9 bundled sample
-notes** (`offline_sample`) and 8 demo papers (`full_corpus`). **28 multi-hop cases
-deliberately require retrieving several documents at once** (each labels ≥2
-`expected_sources`), stress-testing the "one question, many articles" path. A
-measured `offline_sample` run:
+The bundled corpus is now **106 notes** (`sample_notes/`) spanning architecture
+internals, training, tokenization, alignment, decoding, retrieval, vector indexes,
+RAG, agents, and evaluation — a larger, harder-to-discriminate retrieval corpus.
+The curated eval set holds **132 cases** across 6 categories (`offline_sample` +
+the 8-paper `full_corpus`). **28 multi-hop cases deliberately require retrieving
+several documents at once** (each labels ≥2 `expected_sources`), stress-testing
+the "one question, many articles" path. A measured `offline_sample` run:
 
 | Metric | Result |
 |---|---|
