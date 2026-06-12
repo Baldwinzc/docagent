@@ -1,7 +1,7 @@
 {
     "dockerfile_lines": [],
     "graphs": {
-      "docagent": "./src/docagent/agent.py:make_graph"
+      "citelocal-agent": "./src/citelocal_agent/agent.py:make_graph"
     },
     "python_version": "3.11",
     "env": ".env",

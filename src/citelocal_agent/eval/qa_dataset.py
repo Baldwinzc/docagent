@@ -20,8 +20,8 @@ Each row has:
 
 Reproducible full run (after downloading the papers):
     python scripts/fetch_arxiv.py --demo
-    python -m docagent.ingest --path ./papers --reset
-    python -m docagent.eval.run_eval
+    python -m citelocal_agent.ingest --path ./papers --reset
+    python -m citelocal_agent.eval.run_eval
 
 Required keys + the allowed enum values are validated on load so a malformed row
 fails fast instead of silently skewing the metrics.

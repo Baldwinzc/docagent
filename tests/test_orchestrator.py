@@ -7,16 +7,16 @@ across >=2 distinct sources, and produced a grounded answer with no hallucinated
 citations.
 
 Run from the project root after ingesting sample_notes into the default collection:
-    python -m docagent.ingest --path ./sample_notes --reset
+    python -m citelocal_agent.ingest --path ./sample_notes --reset
     pytest tests/test_orchestrator.py -v
 """
 
 import pytest
 from dotenv import load_dotenv
 
-from docagent.agent import build_agent
-from docagent.eval.qa_dataset import load_qa_cases
-from docagent.utils import extract_outcome
+from citelocal_agent.agent import build_agent
+from citelocal_agent.eval.qa_dataset import load_qa_cases
+from citelocal_agent.utils import extract_outcome
 
 load_dotenv(override=True)
 

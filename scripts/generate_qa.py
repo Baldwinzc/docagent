@@ -2,7 +2,7 @@
 """Auto-generate QA evaluation cases from the ingested knowledge base.
 
 This is the *generation* half of the eval workflow; the human-curation half is
-editing the rows it emits into ``src/docagent/eval/data/qa_cases.jsonl``. The
+editing the rows it emits into ``src/citelocal_agent/eval/data/qa_cases.jsonl``. The
 generator **never** writes that curated file — it writes raw candidates to
 ``generated_raw.jsonl`` (gitignored, regenerable).
 
@@ -18,7 +18,7 @@ It draws real chunks from the same Chroma collection the agent answers from
                                               to confirm the corpus does not cover them
 
 Usage:
-    python -m docagent.ingest --path ./papers --reset
+    python -m citelocal_agent.ingest --path ./papers --reset
     python scripts/generate_qa.py --n-per-category 25
     # then hand-curate generated_raw.jsonl into qa_cases.jsonl
 
@@ -34,19 +34,19 @@ from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 
-from docagent.configuration import (
+from citelocal_agent.configuration import (
     DEFAULT_CHROMA_PATH,
     DEFAULT_COLLECTION,
     DEFAULT_LLM_MODEL,
     DEFAULT_SCORE_THRESHOLD,
 )
-from docagent.retriever import get_retriever
-from docagent.vectorstore import get_vectorstore
+from citelocal_agent.retriever import get_retriever
+from citelocal_agent.vectorstore import get_vectorstore
 
 load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OUT = REPO_ROOT / "src" / "docagent" / "eval" / "data" / "generated_raw.jsonl"
+DEFAULT_OUT = REPO_ROOT / "src" / "citelocal_agent" / "eval" / "data" / "generated_raw.jsonl"
 
 # in_scope categories drawn from chunk(s); the other two are special-cased below.
 CHUNK_CATEGORIES = ("single_paper", "numeric", "definitional", "multi_hop")

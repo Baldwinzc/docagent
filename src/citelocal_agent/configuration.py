@@ -16,7 +16,7 @@ from langchain_core.runnables import RunnableConfig
 # --- Embeddings & vector store ---
 DEFAULT_EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 DEFAULT_CHROMA_PATH = os.environ.get("CHROMA_PATH", "./chroma_db")
-DEFAULT_COLLECTION = os.environ.get("CHROMA_COLLECTION", "docagent")
+DEFAULT_COLLECTION = os.environ.get("CHROMA_COLLECTION", "citelocal_agent")
 
 # --- Chunking (ingest) ---
 DEFAULT_CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "1000"))

@@ -1,10 +1,10 @@
-# docagent — 本地论文研究助手
+# citelocal-agent — 本地论文研究助手
 
 **中文** | [English](README.en.md)
 
 针对一堆论文(或任意本地文档)提问,得到**精确到页码、且经过校验的引用**答案 —— **全程在本机运行**。基于 [LangGraph](https://langchain-ai.github.io/langgraph/)。
 
-云端论文工具(ChatPDF、Elicit……)要你**上传 PDF**。docagent 不用:embedding 本地跑,论文不出本机(`papers/` 已 gitignore),作答模型也可用 Ollama 本地跑。返回的答案是有据的 —— 每条引用都对照实际检索内容校验,精确到 **PDF 页码**。
+云端论文工具(ChatPDF、Elicit……)要你**上传 PDF**。citelocal-agent 不用:embedding 本地跑,论文不出本机(`papers/` 已 gitignore),作答模型也可用 Ollama 本地跑。返回的答案是有据的 —— 每条引用都对照实际检索内容校验,精确到 **PDF 页码**。
 
 ## 凭什么不一样
 
@@ -19,8 +19,8 @@
 
 ```bash
 # 1. 环境（Python 3.11）
-conda create -n docagent python=3.11 -c conda-forge
-conda activate docagent
+conda create -n citelocal-agent python=3.11 -c conda-forge
+conda activate citelocal-agent
 pip install -e .
 
 # 2. 作答 LLM：把 OPENAI_API_KEY 填进 .env —— 或完全本地：
@@ -30,14 +30,14 @@ cp .env.example .env
 # 3. 拉论文（本地下载，绝不上传）并建索引
 python scripts/fetch_arxiv.py --demo          # 8 篇：Attention、RAG、BERT、T5、RoBERTa、DPR、SBERT、GPT-3
 #   或：python scripts/fetch_arxiv.py 1706.03762 2005.11401  （任意 arXiv id）
-python -m docagent.ingest --path ./papers --reset
+python -m citelocal_agent.ingest --path ./papers --reset
 
 # 4. 提问
-python -m docagent.ask --trace "How is BERT related to the Transformer?"
+python -m citelocal_agent.ask --trace "How is BERT related to the Transformer?"
 #   多轮对话（追问会记住前几轮）：
-python -m docagent.chat
+python -m citelocal_agent.chat
 #   或 Web UI：
-python -m docagent.web        # http://127.0.0.1:8000
+python -m citelocal_agent.web        # http://127.0.0.1:8000
 ```
 
 把 `ingest --path` 指向任意装有你自己 `.pdf` / `.md` / `.rst` / `.txt` 的文件夹即可。
@@ -47,7 +47,7 @@ python -m docagent.web        # http://127.0.0.1:8000
 一个**跨论文**问题 —— agent 检索、列出来源、改写再检索,然后从两篇论文带页码作答(真实输出):
 
 ```console
-$ python -m docagent.ask --trace "How does retrieval-augmented generation use a retriever, and how is BERT related to the Transformer architecture?"
+$ python -m citelocal_agent.ask --trace "How does retrieval-augmented generation use a retriever, and how is BERT related to the Transformer architecture?"
 🔎 Intent: IN_SCOPE — retrieving from knowledge base
 === trace ===
   1. search_docs  query='retrieval-augmented generation retriever BERT Transformer architecture'
@@ -71,9 +71,9 @@ Transformer [bert.pdf (p.1); bert.pdf (p.3)].
 
 ## Web UI
 
-![docagent web UI](docs/ui-answer.png)
+![citelocal-agent web UI](docs/ui-answer.png)
 
-小型聊天前端(FastAPI + 静态 Tailwind),展示答案、意图徽章、引用 chips、被丢弃的未支撑引用、可折叠检索 trace。`python -m docagent.web` → http://127.0.0.1:8000。
+小型聊天前端(FastAPI + 静态 Tailwind),展示答案、意图徽章、引用 chips、被丢弃的未支撑引用、可折叠检索 trace。`python -m citelocal_agent.web` → http://127.0.0.1:8000。
 
 API:
 - `POST /api/ask {question, session_id?, collection?}` → `{kind, intent, answer, question, citations, unsupported, trace}`
@@ -86,10 +86,10 @@ API:
 ### Docker
 
 ```bash
-docker build -t docagent .
-docker run --rm -v $PWD/papers:/papers -v $PWD/chroma_db:/data/chroma docagent \
-  python -m docagent.ingest --path /papers --reset
-docker run -p 8000:8000 -v $PWD/chroma_db:/data/chroma -e OPENAI_API_KEY=sk-... docagent
+docker build -t citelocal-agent .
+docker run --rm -v $PWD/papers:/papers -v $PWD/chroma_db:/data/chroma citelocal-agent \
+  python -m citelocal_agent.ingest --path /papers --reset
+docker run -p 8000:8000 -v $PWD/chroma_db:/data/chroma -e OPENAI_API_KEY=sk-... citelocal-agent
 ```
 
 ## 架构
@@ -121,7 +121,7 @@ agent 由 `build_agent(config)` 构建 —— import 时不初始化任何模型
 
 ## 评估
 
-评估集是一个**带类别标注**的 QA 数据集 `src/docagent/eval/data/qa_cases.jsonl`(每行一个 JSON)。每行带 `intent`、`category`(`single_paper` / `multi_hop` / `numeric` / `definitional` / `out_of_scope` / `no_answer`)、黄金 `expected_sources`、LLM 评判用的 `criteria`,以及 `split`:
+评估集是一个**带类别标注**的 QA 数据集 `src/citelocal_agent/eval/data/qa_cases.jsonl`(每行一个 JSON)。每行带 `intent`、`category`(`single_paper` / `multi_hop` / `numeric` / `definitional` / `out_of_scope` / `no_answer`)、黄金 `expected_sources`、LLM 评判用的 `criteria`,以及 `split`:
 
 - `offline_sample` —— 答案落在内置 `sample_notes/`,无需下载论文即可跑(离线 LLM 测试用)。
 - `full_corpus` —— 需下载 `papers/`,手动 / nightly 评估。
@@ -129,11 +129,11 @@ agent 由 `build_agent(config)` 构建 —— import 时不初始化任何模型
 **扩充评测集(生成 → 精校 → 评估):**
 
 ```bash
-python scripts/fetch_arxiv.py --demo && python -m docagent.ingest --path ./papers --reset
+python scripts/fetch_arxiv.py --demo && python -m citelocal_agent.ingest --path ./papers --reset
 python scripts/generate_qa.py --n-per-category 25   # 用真实 chunk 让 LLM 起草候选题
-#   -> 审阅 src/docagent/eval/data/generated_raw.jsonl，把好题 curated=true 后并入 qa_cases.jsonl
-python -m docagent.eval.run_eval                    # full_corpus，输出按类别分组的表
-python -m docagent.eval.run_eval --split offline_sample --categories multi_hop
+#   -> 审阅 src/citelocal_agent/eval/data/generated_raw.jsonl，把好题 curated=true 后并入 qa_cases.jsonl
+python -m citelocal_agent.eval.run_eval                    # full_corpus，输出按类别分组的表
+python -m citelocal_agent.eval.run_eval --split offline_sample --categories multi_hop
 ```
 
 `run_eval` **同时输出总体与按类别分组**的所有指标(按类别这一视图,才能证明某次改动是否真有帮助,比如多跳),并写出机器可读的 `eval_results.json` 基线,便于追踪里程碑间的差异。
@@ -165,7 +165,7 @@ python -m docagent.eval.run_eval --split offline_sample --categories multi_hop
 ## 目录结构
 
 ```
-src/docagent/
+src/citelocal_agent/
 ├── agent.py            # LangGraph 工厂：intent_router + 应答循环 + trace
 ├── retriever.py        # 混合检索：dense+BM25 -> RRF -> 重排 -> 阈值
 ├── ingest.py           # 加载 -> 切块(带页码/行号出处) -> 向量化 -> Chroma

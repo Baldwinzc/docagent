@@ -7,20 +7,20 @@ or embedding model.
 
 from langchain_core.documents import Document
 
-from docagent.agent import _parse_search_results, build_research_loop
-from docagent.eval.qa_dataset import (
+from citelocal_agent.agent import _parse_search_results, build_research_loop
+from citelocal_agent.eval.qa_dataset import (
     CATEGORIES,
     INTENTS,
     SPLITS,
     load_qa_cases,
     qa_names,
 )
-from docagent.ingest import chunk_documents
-from docagent.orchestrator import build_orchestrator
-from docagent.retriever import HybridRetriever
-from docagent.schemas import IntentSchema
-from docagent.utils import extract_outcome, source_of
-from docagent.verify import split_sentences, verify_claims
+from citelocal_agent.ingest import chunk_documents
+from citelocal_agent.orchestrator import build_orchestrator
+from citelocal_agent.retriever import HybridRetriever
+from citelocal_agent.schemas import IntentSchema
+from citelocal_agent.utils import extract_outcome, source_of
+from citelocal_agent.verify import split_sentences, verify_claims
 
 
 class _Msg:
@@ -184,7 +184,7 @@ def test_verify_claims_no_evidence_unsupported():
 # --- M3b: NLI backend (label logic + per-chunk aggregation, no model download) ---
 
 def test_argmax_and_row_is_entailment():
-    from docagent.verify import _argmax, _row_is_entailment
+    from citelocal_agent.verify import _argmax, _row_is_entailment
 
     assert _argmax([0.9, 0.1, 0.0]) == 0
     assert _argmax([0.1, 0.9, 0.0]) == 1
@@ -205,7 +205,7 @@ class _FakeNLI:
 
 
 def test_verify_claims_nli_any_chunk_entails(monkeypatch):
-    monkeypatch.setattr("docagent.verify._get_nli", lambda name: _FakeNLI())
+    monkeypatch.setattr("citelocal_agent.verify._get_nli", lambda name: _FakeNLI())
     evidence = [
         {"locator": "a.md:L1-9", "text": "the call runs in a threadpool"},
         {"locator": "b.md:L1-9", "text": "unrelated noise"},
@@ -221,7 +221,7 @@ def test_verify_claims_nli_any_chunk_entails(monkeypatch):
 
 
 def test_extract_outcome_entailment_optin():
-    from docagent.utils import extract_outcome
+    from citelocal_agent.utils import extract_outcome
 
     class _Msg:
         def __init__(self, tool_calls):
@@ -277,7 +277,7 @@ def test_orchestrator_graph_wiring():
 
 
 def test_merge_subgraph_result_slices_new_messages():
-    from docagent.agent import _merge_subgraph_result
+    from citelocal_agent.agent import _merge_subgraph_result
 
     out = {
         "messages": ["u", "a1", "a2"],
@@ -292,7 +292,7 @@ def test_merge_subgraph_result_slices_new_messages():
 
 
 def test_merge_subgraph_result_omits_absent_keys():
-    from docagent.agent import _merge_subgraph_result
+    from citelocal_agent.agent import _merge_subgraph_result
 
     upd = _merge_subgraph_result({"messages": ["only"]}, 0)
     assert upd["messages"] == ["only"]
@@ -302,7 +302,7 @@ def test_merge_subgraph_result_omits_absent_keys():
 # --- C: multi-turn — router conversation context helper (offline) ---
 
 def test_recent_dialogue_filters_and_strips_prefix():
-    from docagent.agent import _recent_dialogue
+    from citelocal_agent.agent import _recent_dialogue
 
     msgs = [
         {"role": "user", "content": "Answer this question using the knowledge base: What is BM25?"},
@@ -317,7 +317,7 @@ def test_recent_dialogue_filters_and_strips_prefix():
 
 
 def test_recent_dialogue_caps_and_handles_message_objects():
-    from docagent.agent import _recent_dialogue
+    from citelocal_agent.agent import _recent_dialogue
 
     class HumanMessage:  # name drives the role mapping
         def __init__(self, content):
@@ -330,7 +330,7 @@ def test_recent_dialogue_caps_and_handles_message_objects():
 # --- M3d: API hardening primitives (framework-free, offline) ---
 
 def test_rate_limiter_fixed_window():
-    from docagent.security import RateLimiter
+    from citelocal_agent.security import RateLimiter
 
     rl = RateLimiter(max_requests=2, window_seconds=10)
     assert rl.allow("ip", 0.0)
@@ -341,7 +341,7 @@ def test_rate_limiter_fixed_window():
 
 
 def test_api_key_ok(monkeypatch):
-    from docagent.security import api_key_ok
+    from citelocal_agent.security import api_key_ok
 
     monkeypatch.delenv("DOCAGENT_API_KEY", raising=False)
     assert api_key_ok(None) is True   # auth disabled when no key configured

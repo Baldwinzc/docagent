@@ -113,7 +113,7 @@ def extract_outcome(
     # Optional per-sentence entailment check of the answer against the evidence.
     unsupported_sentences, claim_verdicts = [], []
     if answer and intent == "in_scope" and (entail_fn is not None or verify_backend != "off"):
-        from docagent.verify import verify_claims
+        from citelocal_agent.verify import verify_claims
 
         v = verify_claims(
             answer,

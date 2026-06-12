@@ -4,7 +4,7 @@ Library code logs through module loggers (``logging.getLogger(__name__)``) and
 never configures handlers itself. Entrypoints (the CLIs and the web server) call
 ``configure_logging()`` once at startup to attach a console handler; its level
 comes from ``$LOG_LEVEL`` (default INFO). Importing the library with no entrypoint
-leaves logging at Python's default, so embedding docagent stays quiet.
+leaves logging at Python's default, so embedding citelocal_agent stays quiet.
 """
 
 import logging

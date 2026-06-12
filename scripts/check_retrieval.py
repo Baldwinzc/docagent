@@ -7,7 +7,7 @@ No LLM / API key needed — this exercises only the retrieval stack
     python scripts/check_retrieval.py
 """
 
-from docagent.retriever import get_retriever
+from citelocal_agent.retriever import get_retriever
 
 QUERIES = [
     "What is scaled dot-product attention?",

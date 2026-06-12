@@ -1,4 +1,4 @@
-"""docagent package."""
+"""citelocal_agent package."""
 
 from dotenv import find_dotenv, load_dotenv
 

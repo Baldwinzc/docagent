@@ -6,7 +6,7 @@ second turn ("how does IT differ ...") only resolves if the conversation memory
 carried the first turn's topic. Two different threads must NOT share state.
 
 Run after ingesting sample_notes into the default collection:
-    python -m docagent.ingest --path ./sample_notes --reset
+    python -m citelocal_agent.ingest --path ./sample_notes --reset
     pytest tests/test_chat.py -v
 """
 
@@ -15,8 +15,8 @@ import uuid
 import pytest
 from dotenv import load_dotenv
 
-from docagent.agent import build_agent
-from docagent.utils import extract_outcome
+from citelocal_agent.agent import build_agent
+from citelocal_agent.utils import extract_outcome
 
 load_dotenv(override=True)
 

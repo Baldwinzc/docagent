@@ -1,4 +1,4 @@
-# docagent — chat with your papers, fully local
+# citelocal-agent — chat with your papers, fully local
 
 [中文](README.md) | **English**
 
@@ -6,7 +6,7 @@ Ask questions across a pile of papers (or any local docs) and get answers with
 **page-precise, verified citations** — running **entirely on your machine**. Built
 on [LangGraph](https://langchain-ai.github.io/langgraph/).
 
-Cloud paper tools (ChatPDF, Elicit, …) make you **upload your PDFs**. docagent
+Cloud paper tools (ChatPDF, Elicit, …) make you **upload your PDFs**. citelocal-agent
 doesn't: embeddings run locally, papers never leave your disk (`papers/` is
 gitignored), and you can even run the answer model locally via Ollama. What you
 get back is grounded — every citation is checked against what was actually
@@ -30,8 +30,8 @@ retrieved, down to the **PDF page**.
 
 ```bash
 # 1. Environment (Python 3.11)
-conda create -n docagent python=3.11 -c conda-forge
-conda activate docagent
+conda create -n citelocal-agent python=3.11 -c conda-forge
+conda activate citelocal-agent
 pip install -e .
 
 # 2. Answer LLM: put OPENAI_API_KEY in .env — or go fully local:
@@ -41,14 +41,14 @@ cp .env.example .env
 # 3. Get some papers (downloaded locally, never uploaded) and index them
 python scripts/fetch_arxiv.py --demo          # 8 papers: Attention, RAG, BERT, T5, RoBERTa, DPR, SBERT, GPT-3
 #   or: python scripts/fetch_arxiv.py 1706.03762 2005.11401  (any arXiv ids)
-python -m docagent.ingest --path ./papers --reset
+python -m citelocal_agent.ingest --path ./papers --reset
 
 # 4. Ask
-python -m docagent.ask --trace "How is BERT related to the Transformer?"
+python -m citelocal_agent.ask --trace "How is BERT related to the Transformer?"
 #   multi-turn chat (follow-ups remember earlier turns):
-python -m docagent.chat
+python -m citelocal_agent.chat
 #   or the web UI:
-python -m docagent.web        # http://127.0.0.1:8000
+python -m citelocal_agent.web        # http://127.0.0.1:8000
 ```
 
 Point `ingest --path` at any folder of your own `.pdf` / `.md` / `.rst` / `.txt`.
@@ -59,7 +59,7 @@ A **cross-paper** question — the agent searches, lists sources, re-queries, th
 answers from two papers with page citations (real output):
 
 ```console
-$ python -m docagent.ask --trace "How does retrieval-augmented generation use a retriever, and how is BERT related to the Transformer architecture?"
+$ python -m citelocal_agent.ask --trace "How does retrieval-augmented generation use a retriever, and how is BERT related to the Transformer architecture?"
 🔎 Intent: IN_SCOPE — retrieving from knowledge base
 === trace ===
   1. search_docs  query='retrieval-augmented generation retriever BERT Transformer architecture'
@@ -85,11 +85,11 @@ shows the raw retrieval stack with no API key.
 
 ## Web UI
 
-![docagent web UI](docs/ui-answer.png)
+![citelocal-agent web UI](docs/ui-answer.png)
 
 A small chat front-end (FastAPI + a static Tailwind page) showing the answer, the
 intent badge, citation chips, dropped (unsupported) citations, and a collapsible
-retrieval trace. `python -m docagent.web` → http://127.0.0.1:8000.
+retrieval trace. `python -m citelocal_agent.web` → http://127.0.0.1:8000.
 
 API:
 - `POST /api/ask {question, session_id?, collection?}` → `{kind, intent, answer, question, citations, unsupported, trace}`
@@ -104,11 +104,11 @@ Set `DOCAGENT_API_KEY` to require `X-API-Key` on `/api/*`, and
 ### Docker
 
 ```bash
-docker build -t docagent .
+docker build -t citelocal-agent .
 # ingest into a mounted volume, then serve it:
-docker run --rm -v $PWD/papers:/papers -v $PWD/chroma_db:/data/chroma docagent \
-  python -m docagent.ingest --path /papers --reset
-docker run -p 8000:8000 -v $PWD/chroma_db:/data/chroma -e OPENAI_API_KEY=sk-... docagent
+docker run --rm -v $PWD/papers:/papers -v $PWD/chroma_db:/data/chroma citelocal-agent \
+  python -m citelocal_agent.ingest --path /papers --reset
+docker run -p 8000:8000 -v $PWD/chroma_db:/data/chroma -e OPENAI_API_KEY=sk-... citelocal-agent
 ```
 
 ## Architecture
@@ -142,7 +142,7 @@ import time; tools are bound to the configured retriever (`make_retrieval_tools`
 ## Evaluation
 
 The eval set is a curated, **category-labelled** QA dataset in
-`src/docagent/eval/data/qa_cases.jsonl` (one JSON row per case). Each row carries
+`src/citelocal_agent/eval/data/qa_cases.jsonl` (one JSON row per case). Each row carries
 an `intent`, a `category` (`single_paper` / `multi_hop` / `numeric` /
 `definitional` / `out_of_scope` / `no_answer`), gold `expected_sources`, an
 LLM-judged `criteria`, and a `split`:
@@ -154,12 +154,12 @@ LLM-judged `criteria`, and a `split`:
 **Grow the set (generate → curate → eval):**
 
 ```bash
-python scripts/fetch_arxiv.py --demo && python -m docagent.ingest --path ./papers --reset
+python scripts/fetch_arxiv.py --demo && python -m citelocal_agent.ingest --path ./papers --reset
 python scripts/generate_qa.py --n-per-category 25   # LLM-drafts candidates from real chunks
-#   -> review src/docagent/eval/data/generated_raw.jsonl, set curated=true,
+#   -> review src/citelocal_agent/eval/data/generated_raw.jsonl, set curated=true,
 #      and merge good rows into qa_cases.jsonl
-python -m docagent.eval.run_eval                    # full_corpus, per-category table
-python -m docagent.eval.run_eval --split offline_sample --categories multi_hop
+python -m citelocal_agent.eval.run_eval                    # full_corpus, per-category table
+python -m citelocal_agent.eval.run_eval --split offline_sample --categories multi_hop
 ```
 
 `run_eval` reports every metric **overall and broken down by category** (the
@@ -208,7 +208,7 @@ Per category (recall / answer correctness):
 ## Project layout
 
 ```
-src/docagent/
+src/citelocal_agent/
 ├── agent.py            # LangGraph factory: intent_router + response loop + trace
 ├── retriever.py        # hybrid: dense+BM25 -> RRF -> rerank -> threshold
 ├── ingest.py           # load -> chunk (+page/line provenance) -> embed -> Chroma

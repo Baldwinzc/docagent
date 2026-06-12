@@ -5,7 +5,7 @@ is exercised by the LLM-gated suites."""
 import pytest
 from fastapi.testclient import TestClient
 
-import docagent.web as web
+import citelocal_agent.web as web
 
 
 @pytest.fixture

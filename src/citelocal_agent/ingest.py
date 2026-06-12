@@ -6,8 +6,8 @@ same-named files in different folders don't collide), a line range (or PDF page)
 and a stable ``chunk_id`` used as the Chroma id.
 
 Usage:
-    python -m docagent.ingest --path ./corpus
-    python -m docagent.ingest --path ./corpus --reset
+    python -m citelocal_agent.ingest --path ./corpus
+    python -m citelocal_agent.ingest --path ./corpus --reset
 """
 
 import argparse
@@ -18,14 +18,14 @@ from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from docagent import bm25_index
-from docagent.configuration import (
+from citelocal_agent import bm25_index
+from citelocal_agent.configuration import (
     DEFAULT_CHROMA_PATH,
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_COLLECTION,
 )
-from docagent.vectorstore import get_vectorstore
+from citelocal_agent.vectorstore import get_vectorstore
 
 load_dotenv()
 

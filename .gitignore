@@ -61,7 +61,7 @@ htmlcov/
 .env.production.local
 .langgraph_api
 
-# docagent vector store (rebuild with: python -m docagent.ingest --path ...)
+# citelocal-agent vector store (rebuild with: python -m citelocal_agent.ingest --path ...)
 chroma_db/
 
 # user papers (downloaded locally, never uploaded)
@@ -71,7 +71,7 @@ papers/
 CLAUDE.md
 
 # eval: raw auto-generated QA candidates (regenerable) + machine-readable results
-src/docagent/eval/data/generated_raw.jsonl
+src/citelocal_agent/eval/data/generated_raw.jsonl
 eval_results.json
 eval_offline.json
 eval_mh.json

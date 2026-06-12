@@ -12,8 +12,8 @@ Sweep candidate thresholds and report precision / recall / abstention, so
 
 import argparse
 
-from docagent.eval.qa_dataset import load_qa_cases
-from docagent.retriever import get_retriever
+from citelocal_agent.eval.qa_dataset import load_qa_cases
+from citelocal_agent.retriever import get_retriever
 
 
 def main():

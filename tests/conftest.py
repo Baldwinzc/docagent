@@ -16,7 +16,7 @@ def pytest_addoption(parser):
         "--agent-module",
         action="store",
         default="agent",
-        help="Which docagent graph module to test (default: agent)",
+        help="Which citelocal_agent graph module to test (default: agent)",
     )
 
 

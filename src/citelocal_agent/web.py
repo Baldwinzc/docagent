@@ -1,8 +1,8 @@
-"""FastAPI web server for docagent: a JSON API + a static chat UI.
+"""FastAPI web server for citelocal_agent: a JSON API + a static chat UI.
 
 Run:
-    python -m docagent.web              # then open http://127.0.0.1:8000
-    # or: uvicorn docagent.web:app --reload
+    python -m citelocal_agent.web              # then open http://127.0.0.1:8000
+    # or: uvicorn citelocal_agent.web:app --reload
 
 Endpoints:
     GET  /health           -> {status} (liveness; no models loaded)
@@ -34,18 +34,21 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from docagent.agent import build_agent, get_chat_agent  # noqa: E402 (after load_dotenv)
-from docagent.configuration import Configuration  # noqa: E402
-from docagent.logging_config import configure_logging  # noqa: E402
-from docagent.retriever import get_retriever  # noqa: E402
-from docagent.security import RateLimiter, api_key_ok  # noqa: E402
-from docagent.utils import extract_outcome  # noqa: E402
+from citelocal_agent.agent import (  # noqa: E402 (after load_dotenv)
+    build_agent,
+    get_chat_agent,
+)
+from citelocal_agent.configuration import Configuration  # noqa: E402
+from citelocal_agent.logging_config import configure_logging  # noqa: E402
+from citelocal_agent.retriever import get_retriever  # noqa: E402
+from citelocal_agent.security import RateLimiter, api_key_ok  # noqa: E402
+from citelocal_agent.utils import extract_outcome  # noqa: E402
 
 configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="docagent",
+    title="citelocal-agent",
     description="Agentic RAG over local documents, with verified citations.",
 )
 

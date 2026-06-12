@@ -1,6 +1,6 @@
 """Shared embedding + Chroma vector-store backend.
 
-Ingestion (``docagent.ingest``) and retrieval (``docagent.retriever``) import
+Ingestion (``citelocal_agent.ingest``) and retrieval (``citelocal_agent.retriever``) import
 from here, so they always read/write the same collection with the same local
 embedding model (no API key required).
 """
@@ -10,7 +10,7 @@ from functools import lru_cache
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 
-from docagent.configuration import (
+from citelocal_agent.configuration import (
     DEFAULT_CHROMA_PATH,
     DEFAULT_COLLECTION,
     DEFAULT_EMBEDDING_MODEL,

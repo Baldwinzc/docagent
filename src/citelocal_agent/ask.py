@@ -2,18 +2,18 @@
 """CLI: ask the local knowledge base a question.
 
 Usage:
-    python -m docagent.ask "How do I declare an integer path parameter?"
-    python -m docagent.ask --trace "..."     # also print the retrieval trace
+    python -m citelocal_agent.ask "How do I declare an integer path parameter?"
+    python -m citelocal_agent.ask --trace "..."     # also print the retrieval trace
 """
 
 import argparse
 
 from dotenv import load_dotenv
 
-from docagent.agent import get_default_agent
-from docagent.configuration import Configuration, llm_call_kwargs
-from docagent.logging_config import configure_logging
-from docagent.utils import extract_outcome
+from citelocal_agent.agent import get_default_agent
+from citelocal_agent.configuration import Configuration, llm_call_kwargs
+from citelocal_agent.logging_config import configure_logging
+from citelocal_agent.utils import extract_outcome
 
 
 def _print_trace(result: dict) -> None:

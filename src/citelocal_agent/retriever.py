@@ -1,4 +1,4 @@
-"""Hybrid retriever — docagent's retrieval core.
+"""Hybrid retriever — citelocal_agent's retrieval core.
 
 Pipeline:  dense (vector) + sparse (BM25)  ->  Reciprocal-Rank-Fusion
            ->  cross-encoder rerank  ->  relevance-threshold filter.
@@ -23,8 +23,8 @@ from typing import List
 from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
 
-from docagent import bm25_index
-from docagent.configuration import (
+from citelocal_agent import bm25_index
+from citelocal_agent.configuration import (
     DEFAULT_CANDIDATE_K,
     DEFAULT_CHROMA_PATH,
     DEFAULT_COLLECTION,
@@ -33,7 +33,7 @@ from docagent.configuration import (
     DEFAULT_SCORE_THRESHOLD,
     DEFAULT_TOP_K,
 )
-from docagent.vectorstore import get_vectorstore
+from citelocal_agent.vectorstore import get_vectorstore
 
 
 @dataclass

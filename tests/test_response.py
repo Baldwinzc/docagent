@@ -14,11 +14,15 @@ from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 
-from docagent.agent import build_agent
-from docagent.configuration import DEFAULT_LLM_MODEL
-from docagent.eval.prompts import RESPONSE_CRITERIA_SYSTEM_PROMPT
-from docagent.eval.qa_dataset import load_qa_cases
-from docagent.utils import extract_outcome, extract_tool_calls, format_messages_string
+from citelocal_agent.agent import build_agent
+from citelocal_agent.configuration import DEFAULT_LLM_MODEL
+from citelocal_agent.eval.prompts import RESPONSE_CRITERIA_SYSTEM_PROMPT
+from citelocal_agent.eval.qa_dataset import load_qa_cases
+from citelocal_agent.utils import (
+    extract_outcome,
+    extract_tool_calls,
+    format_messages_string,
+)
 
 load_dotenv(override=True)
 

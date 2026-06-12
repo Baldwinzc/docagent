@@ -21,15 +21,15 @@ import logging
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
-from docagent.prompts import (
+from citelocal_agent.prompts import (
     planner_system_prompt,
     planner_user_prompt,
     synthesizer_system_prompt,
 )
-from docagent.schemas import PlanSchema, State
-from docagent.tools import Answer
-from docagent.utils import extract_outcome
-from docagent.verify import verify_claims
+from citelocal_agent.schemas import PlanSchema, State
+from citelocal_agent.tools import Answer
+from citelocal_agent.utils import extract_outcome
+from citelocal_agent.verify import verify_claims
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run the docagent test suite.
+"""Run the citelocal_agent test suite.
 
 Examples:
     python tests/run_all_tests.py            # local retrieval tests only (no key)
@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run docagent tests")
+    parser = argparse.ArgumentParser(description="Run citelocal_agent tests")
     parser.add_argument(
         "--all",
         action="store_true",
@@ -22,7 +22,7 @@ def main():
     )
     args = parser.parse_args()
 
-    os.environ.setdefault("LANGSMITH_PROJECT", "docagent-eval")
+    os.environ.setdefault("LANGSMITH_PROJECT", "citelocal_agent-eval")
 
     test_files = ["tests/test_retrieval.py"]
     if args.all:

@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from docagent import bm25_index
-from docagent.ingest import chunk_documents, load_documents
-from docagent.retriever import HybridRetriever
-from docagent.vectorstore import get_vectorstore
+from citelocal_agent import bm25_index
+from citelocal_agent.ingest import chunk_documents, load_documents
+from citelocal_agent.retriever import HybridRetriever
+from citelocal_agent.vectorstore import get_vectorstore
 
 NOTES = Path(__file__).parent.parent / "sample_notes"
 

@@ -7,7 +7,7 @@ uploaded to a third party (that's the whole point versus cloud paper tools).
     python scripts/fetch_arxiv.py 1706.03762 2005.11401
     python scripts/fetch_arxiv.py --demo        # a small starter set
     # then:
-    python -m docagent.ingest --path ./papers --reset
+    python -m citelocal_agent.ingest --path ./papers --reset
 """
 
 import argparse
@@ -17,7 +17,7 @@ from pathlib import Path
 PAPERS = Path(__file__).resolve().parent.parent / "papers"
 
 # A small, recognizable starter set (downloaded locally, not redistributed).
-# These cover the full_corpus eval cases in src/docagent/eval/data/qa_cases.jsonl.
+# These cover the full_corpus eval cases in src/citelocal_agent/eval/data/qa_cases.jsonl.
 DEMO = {
     "1706.03762": "attention-is-all-you-need",
     "2005.11401": "retrieval-augmented-generation",
@@ -34,7 +34,7 @@ def fetch(arxiv_id: str, name: str | None = None) -> None:
     PAPERS.mkdir(exist_ok=True)
     url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
     fname = f"{name or arxiv_id}.pdf"
-    req = urllib.request.Request(url, headers={"User-Agent": "docagent-arxiv"})
+    req = urllib.request.Request(url, headers={"User-Agent": "citelocal_agent-arxiv"})
     data = urllib.request.urlopen(req, timeout=60).read()
     (PAPERS / fname).write_bytes(data)
     print(f"  {arxiv_id} -> papers/{fname} ({len(data) // 1024} KB)")
@@ -56,7 +56,7 @@ def main():
             fetch(aid, name)
         except Exception as e:  # noqa: BLE001
             print(f"  skip {aid}: {e}")
-    print("Done.\nNext: python -m docagent.ingest --path ./papers --reset")
+    print("Done.\nNext: python -m citelocal_agent.ingest --path ./papers --reset")
 
 
 if __name__ == "__main__":

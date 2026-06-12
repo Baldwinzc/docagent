@@ -6,8 +6,8 @@ that?") resolve against earlier turns. Each turn is still routed (scope +
 simple/complex) and answered with verified citations.
 
 Usage:
-    python -m docagent.chat
-    python -m docagent.chat --verify nli     # also flag ungrounded sentences
+    python -m citelocal_agent.chat
+    python -m citelocal_agent.chat --verify nli     # also flag ungrounded sentences
 
 Type 'exit' / 'quit' (or Ctrl-D) to leave; 'reset' starts a fresh thread.
 """
@@ -17,11 +17,11 @@ import uuid
 
 from dotenv import load_dotenv
 
-from docagent.agent import get_chat_agent
-from docagent.ask import _print_outcome
-from docagent.configuration import Configuration, llm_call_kwargs
-from docagent.logging_config import configure_logging
-from docagent.utils import extract_outcome
+from citelocal_agent.agent import get_chat_agent
+from citelocal_agent.ask import _print_outcome
+from citelocal_agent.configuration import Configuration, llm_call_kwargs
+from citelocal_agent.logging_config import configure_logging
+from citelocal_agent.utils import extract_outcome
 
 
 def main():
@@ -46,7 +46,7 @@ def main():
 
     agent = get_chat_agent()
     thread_id = uuid.uuid4().hex
-    print("docagent chat — ask a question ('exit' to quit, 'reset' for a new thread)\n")
+    print("citelocal_agent chat — ask a question ('exit' to quit, 'reset' for a new thread)\n")
     while True:
         try:
             q = input("you> ").strip()

@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""Quantitative evaluation of docagent over docagent.eval.qa_dataset.
+"""Quantitative evaluation of citelocal_agent over citelocal_agent.eval.qa_dataset.
 
 Run from the project root, after ingesting the corpus that matches the split:
-    python -m docagent.ingest --path ./papers --reset
-    python -m docagent.eval.run_eval                       # full_corpus (default)
-    python -m docagent.eval.run_eval --split offline_sample --categories multi_hop
+    python -m citelocal_agent.ingest --path ./papers --reset
+    python -m citelocal_agent.eval.run_eval                       # full_corpus (default)
+    python -m citelocal_agent.eval.run_eval --split offline_sample --categories multi_hop
 
 Metrics (reported overall AND broken down by category — the per-category view is
 what lets us prove later milestones, e.g. multi-hop, actually improve):
@@ -28,12 +28,16 @@ from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 
-from docagent.agent import get_default_agent
-from docagent.configuration import DEFAULT_LLM_MODEL, DEFAULT_TOP_K, llm_call_kwargs
-from docagent.eval.qa_dataset import CATEGORIES, load_qa_cases
-from docagent.logging_config import configure_logging
-from docagent.retriever import get_retriever
-from docagent.utils import extract_outcome, source_of
+from citelocal_agent.agent import get_default_agent
+from citelocal_agent.configuration import (
+    DEFAULT_LLM_MODEL,
+    DEFAULT_TOP_K,
+    llm_call_kwargs,
+)
+from citelocal_agent.eval.qa_dataset import CATEGORIES, load_qa_cases
+from citelocal_agent.logging_config import configure_logging
+from citelocal_agent.retriever import get_retriever
+from citelocal_agent.utils import extract_outcome, source_of
 
 load_dotenv()
 
@@ -103,7 +107,7 @@ def _summarise(s: dict) -> dict:
 
 def main():
     configure_logging()
-    parser = argparse.ArgumentParser(description="Evaluate docagent over the QA dataset.")
+    parser = argparse.ArgumentParser(description="Evaluate citelocal_agent over the QA dataset.")
     parser.add_argument("--split", default="full_corpus",
                         choices=["full_corpus", "offline_sample"])
     parser.add_argument("--categories", nargs="*", default=None, choices=sorted(CATEGORIES))

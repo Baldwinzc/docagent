@@ -19,10 +19,10 @@ test-online:           ## LLM-gated tests — need OPENAI_API_KEY + ingested sam
 	python -m pytest tests/test_response.py tests/test_orchestrator.py tests/test_chat.py -q
 
 eval:                  ## per-category evaluation table (needs API key)
-	python -m docagent.eval.run_eval
+	python -m citelocal_agent.eval.run_eval
 
 ingest-demo:           ## fetch the 8 demo papers and ingest them
-	python scripts/fetch_arxiv.py --demo && python -m docagent.ingest --path ./papers --reset
+	python scripts/fetch_arxiv.py --demo && python -m citelocal_agent.ingest --path ./papers --reset
 
 clean:
 	rm -rf dist build .pytest_cache .mypy_cache **/__pycache__

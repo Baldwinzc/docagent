@@ -33,9 +33,9 @@ from langchain.chat_models import init_chat_model
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
-from docagent.configuration import Configuration, llm_call_kwargs
-from docagent.orchestrator import build_orchestrator
-from docagent.prompts import (
+from citelocal_agent.configuration import Configuration, llm_call_kwargs
+from citelocal_agent.orchestrator import build_orchestrator
+from citelocal_agent.prompts import (
     AGENT_TOOLS_PROMPT,
     agent_system_prompt,
     default_intent_instructions,
@@ -43,10 +43,10 @@ from docagent.prompts import (
     intent_system_prompt,
     intent_user_prompt,
 )
-from docagent.retriever import get_retriever
-from docagent.schemas import IntentSchema, State, StateInput
-from docagent.tools import get_tools_by_name, make_retrieval_tools
-from docagent.utils import extract_message_content
+from citelocal_agent.retriever import get_retriever
+from citelocal_agent.schemas import IntentSchema, State, StateInput
+from citelocal_agent.tools import get_tools_by_name, make_retrieval_tools
+from citelocal_agent.utils import extract_message_content
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +245,7 @@ def build_agent(config: Configuration | None = None, checkpointer=None):
                         {
                             "role": "assistant",
                             "content": "The knowledge base is empty. Run "
-                            "`python -m docagent.ingest --path <your-docs>` first.",
+                            "`python -m citelocal_agent.ingest --path <your-docs>` first.",
                         }
                     ],
                 },

@@ -1,13 +1,13 @@
-# docagent — CPU image serving the web API + chat UI.
+# citelocal-agent — CPU image serving the web API + chat UI.
 #
-#   docker build -t docagent .
+#   docker build -t citelocal-agent .
 #   # mount a prebuilt Chroma store + bm25s index at /data, or ingest into the volume:
-#   docker run -p 8000:8000 -v $PWD/chroma_db:/data/chroma -e OPENAI_API_KEY=sk-... docagent
+#   docker run -p 8000:8000 -v $PWD/chroma_db:/data/chroma -e OPENAI_API_KEY=sk-... citelocal-agent
 #
 # The image carries no knowledge base; point CHROMA_PATH (default /data/chroma) at
 # a mounted volume you ingested into, e.g.:
-#   docker run --rm -v $PWD/papers:/papers -v $PWD/chroma_db:/data/chroma docagent \
-#     python -m docagent.ingest --path /papers --reset
+#   docker run --rm -v $PWD/papers:/papers -v $PWD/chroma_db:/data/chroma citelocal-agent \
+#     python -m citelocal_agent.ingest --path /papers --reset
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -27,4 +27,4 @@ ENV CHROMA_PATH=/data/chroma \
     LOG_LEVEL=INFO
 
 EXPOSE 8000
-CMD ["uvicorn", "docagent.web:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "citelocal_agent.web:app", "--host", "0.0.0.0", "--port", "8000"]
