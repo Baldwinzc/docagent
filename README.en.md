@@ -194,20 +194,6 @@ Per category (recall / answer correctness):
 > a question needs), yet answers and citations still came out correct. Numbers
 > depend on the answer model behind `LLM_MODEL`; re-run `run_eval` for your own.
 
-## Limitations
-
-Portfolio-grade local RAG, not a production system. Known limits:
-
-- **Corpus scale** — the retriever loads all chunks and builds BM25 in memory at
-  startup; fine for a personal paper library (≤ ~10k chunks), not 10⁵–10⁶.
-- **Citation verification is source/page-level** — checked against retrieved
-  locators, not yet per-sentence entailment of the cited span.
-- **Multi-hop** — questions needing several papers at once are the hardest case.
-- **Eval breadth** — the eval set is now a curated, category-labelled JSONL with a
-  generator (`scripts/generate_qa.py`), but broad generalisation still depends on
-  running generation + human curation over a larger corpus; the committed seed is
-  intentionally small.
-
 ## Project layout
 
 ```
