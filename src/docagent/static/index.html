@@ -148,21 +148,34 @@
     $form.addEventListener("submit", e => { e.preventDefault(); ask(); });
     $q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } });
 
-    // ?demo — 渲染一段真实的示例问答(离线预览 / 截图用)
+    // ?demo — 渲染一段真实的多轮对话(离线预览 / 截图用)。第二轮的「它」只有
+    // 在记住第一轮上下文时才能理解 —— 用来展示多轮对话记忆。
     if (new URLSearchParams(location.search).has("demo")) {
-      const DEMO = {
-        kind: "answer", intent: "in_scope",
-        answer: "RAG 使用检索器访问一个稠密向量索引:检索器根据输入提供若干潜在文档,模型在给定不同检索文档的条件下对 seq2seq 预测做边缘化 [retrieval-augmented-generation.pdf (p.1)]。BERT 与 Transformer 的关系在于:它本身就是一个多层**双向 Transformer 编码器**,构建在原始 Transformer 架构之上 [bert.pdf (p.1)]。",
-        citations: ["retrieval-augmented-generation.pdf (p.1)", "bert.pdf (p.1)", "bert.pdf (p.3)"],
-        unsupported: [],
-        trace: [
-          { step: "search_docs", query: "检索增强生成 检索器 BERT Transformer 架构" },
-          { step: "list_sources" },
-          { step: "search_docs", query: "BERT 双向 Transformer 编码器 层数" },
-        ],
-      };
-      $messages.appendChild(userBubble("检索增强生成(RAG)如何使用检索器,BERT 与 Transformer 又是什么关系?"));
-      $messages.appendChild(card(DEMO));
+      $messages.innerHTML = "";  // 干净的对话视图,便于截图
+      const TURNS = [
+        {
+          q: "什么是缩放点积注意力(scaled dot-product attention)?",
+          a: {
+            kind: "answer", intent: "in_scope",
+            answer: "它按 softmax(QKᵀ/√d_k)·V 计算:先对查询 Q 与键 K 做点积,除以 √d_k 缩放,经 softmax 得到权重,再对值 V 加权求和 [transformers-and-attention.md:L9-16]。",
+            citations: ["transformers-and-attention.md:L9-16"], unsupported: [],
+            trace: [{ step: "search_docs", query: "缩放点积注意力 公式 softmax QK 值" }],
+          },
+        },
+        {
+          q: "它为什么要除以 √d_k?",
+          a: {
+            kind: "answer", intent: "in_scope",
+            answer: "因为当维度 d_k 较大时,点积的量级会随之变大,把 softmax 推入梯度极小的区域;除以 √d_k 抵消这种增长,让训练更稳定 [transformers-and-attention.md:L9-16]。",
+            citations: ["transformers-and-attention.md:L9-16"], unsupported: [],
+            trace: [{ step: "search_docs", query: "缩放 1/sqrt(d_k) 点积 梯度 softmax 稳定" }],
+          },
+        },
+      ];
+      for (const t of TURNS) {
+        $messages.appendChild(userBubble(t.q));
+        $messages.appendChild(card(t.a));
+      }
       scroll();
     }
   </script>
