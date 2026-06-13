@@ -81,7 +81,7 @@ API:
 - `GET /api/sources {collection?}` → `{sources}`;`GET /health` → `{status}`
 
 传 `session_id` 保持多轮对话(按线程 checkpointer),传 `collection` 让一个服务承载多个知识库。
-设 `DOCAGENT_API_KEY` 后 `/api/*` 需带 `X-API-Key`;`RATE_LIMIT_REQUESTS`/`RATE_LIMIT_WINDOW` 控制按客户端限流。
+设 `DOCAGENT_API_KEY`(沿用旧包名前缀)后 `/api/*` 需带 `X-API-Key`;`RATE_LIMIT_REQUESTS`/`RATE_LIMIT_WINDOW` 控制按客户端限流。
 
 ### Docker
 
