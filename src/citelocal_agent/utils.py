@@ -34,8 +34,16 @@ def format_messages_string(messages: List[Any]) -> str:
 
 
 def source_of(locator: str) -> str:
-    """``file.md:L1-29`` or ``file.pdf (p.3)`` -> ``file...`` (the source file)."""
-    return re.split(r"[:(]", locator.strip())[0].strip()
+    """``file.md:L1-29`` or ``file.pdf (p.3)`` -> ``file...`` (the source file).
+
+    Web locators (``web:<url>``) are returned whole: the URL *is* the source, so
+    citations are verified by exact URL rather than collapsing every web result to
+    the bare scheme ``web`` (which would let any web citation match any other).
+    """
+    loc = locator.strip()
+    if loc.startswith("web:"):
+        return loc
+    return re.split(r"[:(]", loc)[0].strip()
 
 
 def extract_outcome(

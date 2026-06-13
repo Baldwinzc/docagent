@@ -25,6 +25,8 @@ dependencies = [
 dev = ["pytest", "pytest-xdist", "ruff>=0.6.1", "mypy>=1.11.1"]
 cli = ["langgraph-cli[inmem]>=0.4.0"]    # for `langgraph dev`
 ollama = ["langchain-ollama>=0.2.0"]     # for LLM_MODEL=ollama:... (fully local)
+web = ["ddgs>=9.0.0"]                     # for ENABLE_WEB_SEARCH=1 (keyless DuckDuckGo)
+tavily = ["tavily-python>=0.5.0"]         # for WEB_SEARCH_BACKEND=tavily (needs TAVILY_API_KEY)
 
 [build-system]
 requires = ["setuptools>=73.0.0", "wheel"]

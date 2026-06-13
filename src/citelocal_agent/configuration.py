@@ -43,6 +43,22 @@ DEFAULT_RRF_K = int(os.environ.get("RRF_K", "60"))
 # --- LLM (only the answer step may need a key) ---
 DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL", "openai:gpt-4.1")
 
+# --- Web search tools (opt-in; the project is local-first, so this is OFF by
+# default — when off, the toolset/routing/tests are exactly as before). When on,
+# the agent may also reach the public web; web results carry verifiable
+# `web:<url>` citations, checked the same way as document locators. ---
+DEFAULT_ENABLE_WEB_SEARCH = os.environ.get("ENABLE_WEB_SEARCH", "false").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+# "ddg" (DuckDuckGo, keyless) or "tavily" (higher quality, needs TAVILY_API_KEY).
+DEFAULT_WEB_SEARCH_BACKEND = os.environ.get("WEB_SEARCH_BACKEND", "ddg")
+DEFAULT_WEB_SEARCH_RESULTS = int(os.environ.get("WEB_SEARCH_RESULTS", "5"))
+# Cap on characters of page text fetch_url returns (keeps the context bounded).
+DEFAULT_WEB_FETCH_CHARS = int(os.environ.get("WEB_FETCH_CHARS", "4000"))
+
 
 def llm_call_kwargs() -> dict:
     """Extra constructor kwargs for the chat model, from the environment.
@@ -106,6 +122,10 @@ class Configuration:
     orchestrator_recursion_limit: int = DEFAULT_ORCHESTRATOR_RECURSION_LIMIT
     entailment_backend: str = DEFAULT_ENTAILMENT_BACKEND
     nli_model: str = DEFAULT_NLI_MODEL
+    enable_web_search: bool = DEFAULT_ENABLE_WEB_SEARCH
+    web_search_backend: str = DEFAULT_WEB_SEARCH_BACKEND
+    web_search_results: int = DEFAULT_WEB_SEARCH_RESULTS
+    web_fetch_chars: int = DEFAULT_WEB_FETCH_CHARS
 
     @classmethod
     def from_runnable_config(

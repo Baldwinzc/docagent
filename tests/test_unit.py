@@ -5,6 +5,7 @@ Question extraction) so CI has a hard, fast, offline gate independent of any LLM
 or embedding model.
 """
 
+import pytest
 from langchain_core.documents import Document
 
 from citelocal_agent.agent import _parse_search_results, build_research_loop
@@ -349,3 +350,131 @@ def test_api_key_ok(monkeypatch):
     assert api_key_ok("secret") is True
     assert api_key_ok("wrong") is False
     assert api_key_ok(None) is False
+
+
+# --- Web tools (opt-in): all offline via an injected fake backend, no network ---
+
+from citelocal_agent.tools import get_web_backend, make_web_tools  # noqa: E402
+
+
+class _FakeWebBackend:
+    """Deterministic stand-in for a web backend — no network, no key."""
+
+    def search(self, query, k):
+        results = [
+            {"url": "https://example.com/a", "title": "Title A", "snippet": "Snippet A about X."},
+            {"url": "https://example.com/b", "title": "Title B", "snippet": "Snippet B.", "score": 0.42},
+        ]
+        return results[:k]
+
+    def fetch(self, url, max_chars):
+        return (f"Full readable page text for {url}. " * 5)[:max_chars]
+
+
+def _tools_by_name(backend, max_results=5, fetch_chars=4000):
+    return {t.name: t for t in make_web_tools(backend, max_results, fetch_chars)}
+
+
+def test_web_search_emits_parseable_web_locators():
+    by = _tools_by_name(_FakeWebBackend())
+    out = by["web_search"].invoke({"query": "anything"})
+    pairs = _parse_search_results(out)  # the SAME parser tool_node uses
+    assert [loc for loc, _ in pairs] == [
+        "web:https://example.com/a",
+        "web:https://example.com/b",
+    ]
+    # title + snippet both land in the evidence text for the first result
+    assert "Title A" in pairs[0][1] and "Snippet A about X." in pairs[0][1]
+
+
+def test_fetch_url_emits_single_web_block_truncated():
+    by = _tools_by_name(_FakeWebBackend(), fetch_chars=40)
+    out = by["fetch_url"].invoke({"url": "https://example.com/a"})
+    pairs = _parse_search_results(out)
+    assert len(pairs) == 1
+    assert pairs[0][0] == "web:https://example.com/a"
+    assert pairs[0][1] and len(pairs[0][1]) <= 40  # respects fetch_chars cap
+
+
+def test_web_search_no_results_message():
+    class _Empty:
+        def search(self, q, k):
+            return []
+
+        def fetch(self, u, m):
+            return ""
+
+    by = _tools_by_name(_Empty())
+    assert "No web results" in by["web_search"].invoke({"query": "x"})
+
+
+def test_source_of_web_locator_is_exact():
+    # web locators verify by full URL; files keep basename/source behavior
+    assert source_of("web:https://x.com/a?b=1") == "web:https://x.com/a?b=1"
+    assert source_of("async.md:L10-20") == "async.md"
+
+
+def test_extract_outcome_verifies_web_citations():
+    result = {
+        "classification_decision": "in_scope",
+        "retrieved_locators": ["web:https://example.com/a"],  # only this was fetched
+        "messages": [
+            _Msg(tool_calls=[{
+                "name": "Answer",
+                "args": {
+                    "answer": "The release is 2.1 [web:https://example.com/a].",
+                    "citations": [
+                        "web:https://example.com/a",      # fetched -> supported
+                        "web:https://never-fetched.com",  # not fetched -> dropped
+                    ],
+                },
+            }])
+        ],
+    }
+    o = extract_outcome(result)
+    assert o["citations"] == ["web:https://example.com/a"]
+    assert o["unsupported"] == ["web:https://never-fetched.com"]
+
+
+def test_get_web_backend_factory():
+    from citelocal_agent.tools.web_tools import DuckDuckGoBackend, TavilyBackend
+
+    assert isinstance(get_web_backend("ddg"), DuckDuckGoBackend)
+    assert isinstance(get_web_backend(), DuckDuckGoBackend)  # default
+    assert isinstance(get_web_backend("tavily"), TavilyBackend)
+    with pytest.raises(ValueError):
+        get_web_backend("nope")
+
+
+def test_intent_schema_accepts_web_answerable():
+    s = IntentSchema(reasoning="x", classification="web_answerable")
+    assert s.classification == "web_answerable"
+
+
+def test_research_loop_records_web_evidence():
+    """tool_node records web_search locators + evidence (just like search_docs)."""
+    from langchain_core.messages import AIMessage
+
+    tools_by_name = {t.name: t for t in make_web_tools(_FakeWebBackend(), 5, 4000)}
+
+    class _TwoStepLLM:
+        """Step 1: call web_search. Step 2: no tool call, so the loop ends."""
+
+        def __init__(self):
+            self.calls = 0
+
+        def invoke(self, _messages):
+            self.calls += 1
+            if self.calls == 1:
+                return AIMessage(
+                    content="",
+                    tool_calls=[{"name": "web_search", "args": {"query": "x"},
+                                 "id": "1", "type": "tool_call"}],
+                )
+            return AIMessage(content="done")  # no tool_calls -> should_continue -> END
+
+    loop = build_research_loop(_TwoStepLLM(), tools_by_name, "sys")
+    out = loop.invoke({"messages": [{"role": "user", "content": "q"}]})
+    assert "web:https://example.com/a" in out["retrieved_locators"]
+    assert any(e["locator"] == "web:https://example.com/a" for e in out["evidence"])
+    assert any(t.get("step") == "web_search" for t in out["trace"])

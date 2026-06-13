@@ -37,15 +37,24 @@ from citelocal_agent.configuration import Configuration, llm_call_kwargs
 from citelocal_agent.orchestrator import build_orchestrator
 from citelocal_agent.prompts import (
     AGENT_TOOLS_PROMPT,
+    AGENT_TOOLS_PROMPT_WEB,
     agent_system_prompt,
+    agent_system_prompt_web,
     default_intent_instructions,
+    default_intent_instructions_web,
     default_kb_description,
     intent_system_prompt,
+    intent_system_prompt_web,
     intent_user_prompt,
 )
 from citelocal_agent.retriever import get_retriever
 from citelocal_agent.schemas import IntentSchema, State, StateInput
-from citelocal_agent.tools import get_tools_by_name, make_retrieval_tools
+from citelocal_agent.tools import (
+    get_tools_by_name,
+    get_web_backend,
+    make_retrieval_tools,
+    make_web_tools,
+)
 from citelocal_agent.utils import extract_message_content
 
 logger = logging.getLogger(__name__)
@@ -99,10 +108,18 @@ def build_research_loop(llm_with_tools, tools_by_name, system_prompt):
             result.append(
                 {"role": "tool", "content": observation, "tool_call_id": tool_call["id"]}
             )
-            if name == "search_docs":
+            # search_docs and the web tools all emit the same result-block format,
+            # so the same parser records their locators + evidence text — which is
+            # what lets a `web:<url>` citation be verified exactly like a file one.
+            if name in ("search_docs", "web_search"):
                 trace.append(
-                    {"step": "search_docs", "query": tool_call["args"].get("query", "")}
+                    {"step": name, "query": tool_call["args"].get("query", "")}
                 )
+                for loc, text in _parse_search_results(observation):
+                    locators.append(loc)
+                    evidence.append({"locator": loc, "text": text})
+            elif name == "fetch_url":
+                trace.append({"step": "fetch_url", "url": tool_call["args"].get("url", "")})
                 for loc, text in _parse_search_results(observation):
                     locators.append(loc)
                     evidence.append({"locator": loc, "text": text})
@@ -135,6 +152,10 @@ def build_research_loop(llm_with_tools, tools_by_name, system_prompt):
 
 
 _SIMPLE_PREFIX = "Answer this question using the knowledge base: "
+_WEB_PREFIX = (
+    "Answer this question. The local documents may not cover it — prefer the "
+    "knowledge base, but use web_search / fetch_url if needed: "
+)
 
 
 def _recent_dialogue(messages: list, max_msgs: int = 4) -> list[dict]:
@@ -153,9 +174,8 @@ def _recent_dialogue(messages: list, max_msgs: int = 4) -> list[dict]:
             cls = type(m).__name__.lower()
             role = "user" if "human" in cls else "assistant" if "ai" in cls else None
         if role in ("user", "assistant") and content and content.strip():
-            dialogue.append(
-                {"role": role, "content": content.replace(_SIMPLE_PREFIX, "").strip()}
-            )
+            clean = content.replace(_SIMPLE_PREFIX, "").replace(_WEB_PREFIX, "").strip()
+            dialogue.append({"role": role, "content": clean})
     return dialogue[-max_msgs:]
 
 
@@ -185,14 +205,27 @@ def build_agent(config: Configuration | None = None, checkpointer=None):
 
     retriever = get_retriever(config.chroma_path, config.collection_name)
     tools = make_retrieval_tools(retriever, config.top_k, config.score_threshold)
+    # Opt-in web tools (default OFF): when enabled, the agent can also search and
+    # read the public web. They bind into the SAME loop, so the agent chooses
+    # among them autonomously, and they flow to the orchestrator's researchers too.
+    if config.enable_web_search:
+        tools += make_web_tools(
+            get_web_backend(config.web_search_backend),
+            config.web_search_results,
+            config.web_fetch_chars,
+        )
+        system_prompt = agent_system_prompt_web.format(
+            tools_prompt=AGENT_TOOLS_PROMPT_WEB, kb_description=default_kb_description
+        )
+    else:
+        system_prompt = agent_system_prompt.format(
+            tools_prompt=AGENT_TOOLS_PROMPT, kb_description=default_kb_description
+        )
+
     tools_by_name = get_tools_by_name(tools)
     llm = init_chat_model(config.llm_model, temperature=0.0, **llm_call_kwargs())
     llm_router = llm.with_structured_output(IntentSchema)
     llm_with_tools = llm.bind_tools(tools, tool_choice="any")
-
-    system_prompt = agent_system_prompt.format(
-        tools_prompt=AGENT_TOOLS_PROMPT, kb_description=default_kb_description
-    )
 
     research_loop = build_research_loop(llm_with_tools, tools_by_name, system_prompt)
     orchestrator = build_orchestrator(
@@ -251,15 +284,23 @@ def build_agent(config: Configuration | None = None, checkpointer=None):
                 },
             )
 
+        # With web search on, the router also offers a 'web_answerable' tier so
+        # questions the docs don't cover still reach the agent instead of being
+        # declined; otherwise it uses the strict in/out-of-scope prompt.
+        if config.enable_web_search:
+            router_sys = intent_system_prompt_web.format(
+                kb_description=default_kb_description,
+                intent_instructions=default_intent_instructions_web,
+            )
+        else:
+            router_sys = intent_system_prompt.format(
+                kb_description=default_kb_description,
+                intent_instructions=default_intent_instructions,
+            )
+
         # Recent turns give the router context so follow-ups classify correctly.
         router_messages = [
-            {
-                "role": "system",
-                "content": intent_system_prompt.format(
-                    kb_description=default_kb_description,
-                    intent_instructions=default_intent_instructions,
-                ),
-            },
+            {"role": "system", "content": router_sys},
             *_recent_dialogue(state.get("messages", []) or []),
             {"role": "user", "content": intent_user_prompt.format(question=question)},
         ]
@@ -273,9 +314,15 @@ def build_agent(config: Configuration | None = None, checkpointer=None):
             logger.warning("intent router failed (%s); defaulting to in_scope/simple", e)
             classification, complexity = "in_scope", "simple"
 
-        if classification == "in_scope":
+        # in_scope, and (when web is on) web_answerable, both run the agent loop.
+        # web_answerable while web is OFF falls through to the decline below.
+        web_q = classification == "web_answerable"
+        if classification == "in_scope" or (web_q and config.enable_web_search):
+            label = "web_answerable" if web_q else "in_scope"
+            # classification_decision stays "in_scope" so extract_outcome (and the
+            # API) treat the result as an answer, not a refusal.
             if complexity == "complex":
-                logger.info("intent: in_scope (complex) — multi-agent orchestrator")
+                logger.info("intent: %s (complex) — multi-agent orchestrator", label)
                 return Command(
                     goto="orchestrator",
                     # record the human turn so multi-turn history stays coherent
@@ -285,17 +332,13 @@ def build_agent(config: Configuration | None = None, checkpointer=None):
                         "messages": [{"role": "user", "content": question}],
                     },
                 )
-            logger.info("intent: in_scope (simple) — retrieving from knowledge base")
+            logger.info("intent: %s (simple) — retrieval loop", label)
+            prefix = _WEB_PREFIX if web_q else _SIMPLE_PREFIX
             return Command(
                 goto="response_agent",
                 update={
                     "classification_decision": "in_scope",
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": f"Answer this question using the knowledge base: {question}",
-                        }
-                    ],
+                    "messages": [{"role": "user", "content": f"{prefix}{question}"}],
                 },
             )
 

@@ -14,10 +14,13 @@ class IntentSchema(BaseModel):
     reasoning: str = Field(
         description="Step-by-step reasoning behind the classification."
     )
-    classification: Literal["in_scope", "out_of_scope"] = Field(
+    classification: Literal["in_scope", "out_of_scope", "web_answerable"] = Field(
         description="'in_scope' if the question is about the knowledge base contents "
-        "and should be answered by retrieving documents; 'out_of_scope' for "
-        "chit-chat or questions clearly unrelated to the documents.",
+        "and should be answered by retrieving documents; 'web_answerable' (only "
+        "offered when web search is enabled) for a genuine information question the "
+        "local documents likely do NOT cover but the public web can answer; "
+        "'out_of_scope' for chit-chat, greetings, or nonsense the assistant should "
+        "decline. When unsure between in_scope and web_answerable, prefer in_scope.",
     )
     complexity: Literal["simple", "complex"] = Field(
         default="simple",
